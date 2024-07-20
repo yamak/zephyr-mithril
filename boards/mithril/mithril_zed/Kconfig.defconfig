@@ -1,0 +1,4 @@
+if BOARD_MITHRIL_ZED
+
+
+endif # BOARD_MITHRIL_ZED

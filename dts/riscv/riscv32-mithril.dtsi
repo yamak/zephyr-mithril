@@ -1,0 +1,88 @@
+/*
+ * Copyright (c) 2018 - 2020 Antmicro <www.antmicro.com>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/ {
+	#address-cells = <1>;
+	#size-cells = <1>;
+	compatible = "mithril";
+	model = "mithril";
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu@0 {
+			clock-frequency = <50000000>;
+			compatible = "mithril", "riscv";
+			device_type = "cpu";
+			reg = <0>;
+			riscv,isa = "rv32imc";
+			status = "okay";
+		};
+	};
+	soc {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "mithril";
+		ranges;
+
+		intc: interrupt-controller {
+				compatible = "riscv,cpu-intc";
+				#address-cells = <0>;
+				#interrupt-cells = <1>;
+				interrupt-controller;
+				status = "okay";
+		};
+
+		uart0: serial@40003000 {
+			compatible = "mithril,uart";
+			interrupt-parent = <&intc>;
+			interrupts = <16 0>;
+			reg = <0x40003000 0x4
+				0x40003004 0x4
+				0x40003008 0x4>;
+			reg-names =
+				"rxr",
+				"txr",
+				"sr";
+			status = "disabled";
+		};
+
+		spi0: spi@40004000 {
+			compatible = "mithril,spi";
+			reg = <0x40004000 0x4
+				0x40004004 0x4
+				0x40004008 0x4>;
+			reg-names = "cr",
+				"dr",
+				"sr";
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+
+		mtimer: timer@40002000 {
+			compatible = "mithril,machine-timer";
+			interrupt-parent = <&intc>;
+			interrupts = <7 0>;
+			reg = <0x40002000 0x400>;
+			status = "disabled";
+		};
+
+		gpio0: gpio@40001000 {
+			compatible = "mithril,gpio";
+			reg = <0x40001000 0x4
+				0x40001004 0x4
+				0x40001008 0x4>;
+			reg-names = "out",
+				"in",
+				"dbnc";
+			ngpios = <8>;
+			gpio-controller;
+			status = "disabled";
+			#gpio-cells = <2>;
+		};
+	};
+};

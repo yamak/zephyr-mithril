@@ -1,0 +1,6 @@
+# Copyright (c) 2018 - 2019 Antmicro <www.antmicro.com>
+# SPDX-License-Identifier: Apache-2.0
+
+config BOARD_MITHRIL_ZED
+	select SOC_MITHRIL
+	select HAS_MITHRIL_STD_LIB

@@ -1,0 +1,5 @@
+board:
+  name: mithril_zed
+  vendor: mithril
+  socs:
+  - name: mithril

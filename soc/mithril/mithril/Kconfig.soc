@@ -1,0 +1,21 @@
+# Copyright (c) 2018 - 2019 Antmicro <www.antmicro.com>
+# SPDX-License-Identifier: Apache-2.0
+
+config SOC_MITHRIL
+	bool
+	help
+	  Mithril system implementation
+
+config INSTR_MEM_SIZE
+	int "Mithril Instruction Memory Size in kB"
+	help
+	  This option specifies the size of the instruction memory size in kB.
+
+config INSTR_MEM_BASE_ADDRESS
+	hex "Mithril Instruction Memory Base Address"
+	default 0x1000000
+	help
+	  This option specifies the base address of Mihtril's instruction memory
+
+config SOC
+	default "mithril" if SOC_MITHRIL

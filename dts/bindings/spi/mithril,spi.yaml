@@ -1,0 +1,11 @@
+description: Mithril SPI
+
+compatible: "mithril,spi"
+
+include: spi-controller.yaml
+
+properties:
+  reg:
+    required: true
+  cs-gpios:
+    required: true

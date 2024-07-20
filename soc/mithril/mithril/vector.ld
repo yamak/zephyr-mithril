@@ -1,0 +1,2 @@
+
+	KEEP(*(.vector_table.*))

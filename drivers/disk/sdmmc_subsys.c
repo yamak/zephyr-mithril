@@ -36,7 +36,6 @@ static int disk_sdmmc_access_init(struct disk_info *disk)
 	const struct sdmmc_config *cfg = dev->config;
 	struct sdmmc_data *data = dev->data;
 	int ret;
-
 	if (data->status == SD_OK) {
 		/* Called twice, don't reinit */
 		return 0;

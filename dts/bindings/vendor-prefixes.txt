@@ -417,8 +417,9 @@ microsys	MicroSys Electronics GmbH
 mikroe	MikroElektronika d.o.o.
 mikrotik	MikroTik
 miniand	Miniand Tech
-minix	MINIX Technology Ltd.
+minix  	MINIX Technology Ltd.
 miramems	MiraMEMS Sensing Technology Co., Ltd.
+mithril	Mithril Project
 mitsubishi	Mitsubishi Electric Corporation
 modtronix	Modtronix Engineering
 mosaixtech	Mosaix Technologies, Inc.

@@ -1,0 +1,7 @@
+config UART_MITHRIL
+	bool "Mithril serial driver"
+	default y
+	select SERIAL_HAS_DRIVER
+	select SERIAL_SUPPORT_INTERRUPT
+	help
+	  This option enables Mitril serial driver.

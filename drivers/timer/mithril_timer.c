@@ -12,75 +12,10 @@
 #include <zephyr/sys_clock.h>
 #include <zephyr/spinlock.h>
 #include <zephyr/irq.h>
+#include <mithril.h>
+#include <riscv_timer.h>
 
-/* andestech,machine-timer */
-#if DT_HAS_COMPAT_STATUS_OKAY(andestech_machine_timer)
-#define DT_DRV_COMPAT andestech_machine_timer
-
-#define MTIME_REG	DT_INST_REG_ADDR(0)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 8)
-#define TIMER_IRQN	DT_INST_IRQN(0)
-/* neorv32-machine-timer */
-#elif DT_HAS_COMPAT_STATUS_OKAY(neorv32_machine_timer)
-#define DT_DRV_COMPAT neorv32_machine_timer
-
-#define MTIME_REG	DT_INST_REG_ADDR(0)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 8)
-#define TIMER_IRQN	DT_INST_IRQN(0)
-/* nuclei,systimer */
-#elif DT_HAS_COMPAT_STATUS_OKAY(nuclei_systimer)
-#define DT_DRV_COMPAT nuclei_systimer
-
-#define MTIME_REG	DT_INST_REG_ADDR(0)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 8)
-#define TIMER_IRQN	DT_INST_IRQ_BY_IDX(0, 1, irq)
-/* sifive,clint0 */
-#elif DT_HAS_COMPAT_STATUS_OKAY(sifive_clint0)
-#define DT_DRV_COMPAT sifive_clint0
-
-#define MTIME_REG	(DT_INST_REG_ADDR(0) + 0xbff8U)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 0x4000U)
-#define TIMER_IRQN	DT_INST_IRQ_BY_IDX(0, 1, irq)
-/* telink,machine-timer */
-#elif DT_HAS_COMPAT_STATUS_OKAY(telink_machine_timer)
-#define DT_DRV_COMPAT telink_machine_timer
-
-#define MTIME_REG	DT_INST_REG_ADDR(0)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 8)
-#define TIMER_IRQN	DT_INST_IRQN(0)
-/* lowrisc,machine-timer */
-#elif DT_HAS_COMPAT_STATUS_OKAY(lowrisc_machine_timer)
-#define DT_DRV_COMPAT lowrisc_machine_timer
-
-#define MTIME_REG	(DT_INST_REG_ADDR(0) + 0x110)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 0x118)
-#define TIMER_IRQN	DT_INST_IRQN(0)
-/* niosv-machine-timer */
-#elif DT_HAS_COMPAT_STATUS_OKAY(niosv_machine_timer)
-#define DT_DRV_COMPAT niosv_machine_timer
-
-#define MTIMECMP_REG	DT_INST_REG_ADDR(0)
-#define MTIME_REG	(DT_INST_REG_ADDR(0) + 8)
-#define TIMER_IRQN	DT_INST_IRQN(0)
-/* scr,machine-timer*/
-#elif DT_HAS_COMPAT_STATUS_OKAY(scr_machine_timer)
-#define DT_DRV_COMPAT scr_machine_timer
-#define MTIMER_HAS_DIVIDER
-
-#define MTIMEDIV_REG	(DT_INST_REG_ADDR_U64(0) + 4)
-#define MTIME_REG	(DT_INST_REG_ADDR_U64(0) + 8)
-#define MTIMECMP_REG	(DT_INST_REG_ADDR_U64(0) + 16)
-#define TIMER_IRQN	DT_INST_IRQN(0)
-
-
-#elif DT_HAS_COMPAT_STATUS_OKAY(mithril_machine_timer)
-#define DT_DRV_COMPAT mithril_machine_timer
-
-#define MTIMECMP_REG	(DT_INST_REG_ADDR(0) + 8)
-#define MTIME_REG	DT_INST_REG_ADDR(0)
-#define TIMER_IRQN	DT_INST_IRQN(0)
-
-#endif
+#define DT_DRV_COMPAT mithril_timer0
 
 #define CYC_PER_TICK (uint32_t)(sys_clock_hw_cycles_per_sec() \
 				/ CONFIG_SYS_CLOCK_TICKS_PER_SEC)
@@ -97,54 +32,21 @@ static uint32_t last_elapsed;
 const int32_t z_sys_timer_irq_for_test = TIMER_IRQN;
 #endif
 
-static uintptr_t get_hart_mtimecmp(void)
-{
-	return MTIMECMP_REG + (arch_proc_id() * 8);
-}
+
 
 static void set_mtimecmp(uint64_t time)
 {
-#ifdef CONFIG_64BIT
-	*(volatile uint64_t *)get_hart_mtimecmp() = time;
-#else
-	volatile uint32_t *r = (uint32_t *)get_hart_mtimecmp();
-
-	/* Per spec, the RISC-V MTIME/MTIMECMP registers are 64 bit,
-	 * but are NOT internally latched for multiword transfers.  So
-	 * we have to be careful about sequencing to avoid triggering
-	 * spurious interrupts: always set the high word to a max
-	 * value first.
-	 */
-	r[1] = 0xffffffff;
-	r[0] = (uint32_t)time;
-	r[1] = (uint32_t)(time >> 32);
-#endif
+	RV_Timer_CmpUpdate(time)
 }
 
 static void set_divider(void)
 {
-#ifdef MTIMER_HAS_DIVIDER
-	*(volatile uint32_t *)MTIMEDIV_REG =
-		CONFIG_RISCV_MACHINE_TIMER_SYSTEM_CLOCK_DIVIDER;
-#endif
+
 }
 
 static uint64_t mtime(void)
 {
-#ifdef CONFIG_64BIT
-	return *(volatile uint64_t *)MTIME_REG;
-#else
-	volatile uint32_t *r = (uint32_t *)MTIME_REG;
-	uint32_t lo, hi;
-
-	/* Likewise, must guard against rollover when reading */
-	do {
-		hi = r[1];
-		lo = r[0];
-	} while (r[1] != hi);
-
-	return (((uint64_t)hi) << 32) | lo;
-#endif
+	return RV_Timer_Read();
 }
 
 static void timer_isr(const void *arg)

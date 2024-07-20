@@ -1,0 +1,10 @@
+identifier: mithril_zed
+name: Mithril Zed
+type: mcu
+arch: riscv
+toolchain:
+  - lowrisc_gcc
+ram: 153600
+supported:
+  - spi
+vendor: mithril
