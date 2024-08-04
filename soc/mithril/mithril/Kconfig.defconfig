@@ -8,6 +8,9 @@ config NUM_IRQS
 
 config INSTR_MEM_SIZE 
 	default 200
+
+config SRAM_SIZE
+	default 200
 	
 config INSTR_MEM_BASE_ADDRESS
 	default 0x1000000
@@ -19,5 +22,6 @@ config FLASH_SIZE
 	default 200
 
 config XIP
-	default n
+    default n
+
 endif # SOC_MITHRIL
