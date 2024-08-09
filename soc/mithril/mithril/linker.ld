@@ -121,6 +121,7 @@ SECTIONS
 		 *(".exception.other.*")
     } GROUP_LINK_IN(ROMABLE_REGION)
 
+
     SECTION_PROLOGUE(_TEXT_SECTION_NAME,,)
 	{
 		. = ALIGN(4);
@@ -128,9 +129,8 @@ SECTIONS
 		KEEP(*(".openocd_debug.*"))
 
 		__text_region_start = .;
-
-		*(.text)
-		*(".text.*")
+		*(EXCLUDE_FILE(*loader*) .text)
+		*(EXCLUDE_FILE(*loader*) ".text.*")
 		*(.gnu.linkonce.t.*)
 #include <zephyr/linker/kobject-text.ld>
 	} GROUP_LINK_IN(ROMABLE_REGION)
@@ -144,10 +144,10 @@ SECTIONS
     SECTION_PROLOGUE(_RODATA_SECTION_NAME,,)
 	{
 		 . = ALIGN(4);
-		 *(.srodata)
-		 *(".srodata.*")
-		 *(.rodata)
-		 *(".rodata.*")
+		 *(EXCLUDE_FILE(*loader*) .srodata)
+		 *(EXCLUDE_FILE(*loader*) ".srodata.*")
+		 *(EXCLUDE_FILE(*loader*) .rodata)
+		 *(EXCLUDE_FILE(*loader*) ".rodata.*")
 		 *(.gnu.linkonce.r.*)
 		 *(.sdata2 .sdata2.* .gnu.linkonce.s2.*)
 
@@ -161,6 +161,20 @@ SECTIONS
 
 #include <zephyr/linker/cplusplus-rom.ld>
 	__rodata_region_end = .;
+
+    SECTION_PROLOGUE(_LOADER_SECTION_NAME,,)
+    {
+        . = ALIGN(4);
+        _loader_start = .;
+        *loader*(.text)
+        *loader*(.text*)
+        *loader*(.srodata)
+        *loader*(.srodata*)
+        *loader*(.rodata)
+        *loader*(.rodata*)
+        . = ALIGN(4);
+        _loader_end = .;
+    } GROUP_LINK_IN(ROMABLE_REGION)
 
 #ifdef CONFIG_RISCV_PMP
 	SECTION_PROLOGUE(rom_mpu_padding,,)
@@ -371,6 +385,8 @@ GROUP_END(DTCM)
 	KEEP(*(.riscv.attributes))
 	KEEP(*(.gnu.attributes))
 	}
+
+
 
 /* Output section descriptions are needed for these sections to suppress
  * warnings when "--orphan-handling=warn" is set for lld.

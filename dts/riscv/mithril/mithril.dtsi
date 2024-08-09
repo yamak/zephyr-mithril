@@ -1,8 +1,3 @@
-/*
- * Copyright (c) 2018 - 2020 Antmicro <www.antmicro.com>
- *
- * SPDX-License-Identifier: Apache-2.0
- */
 
 / {
 	#address-cells = <1>;
@@ -36,28 +31,27 @@
 				status = "okay";
 		};
 
-		uart0: serial@40003000 {
+		uart0: serial@40004000 {
 			compatible = "mithril,uart";
 			interrupt-parent = <&intc>;
 			interrupts = <16 0>;
-			reg = <0x40003000 0x4
-				0x40003004 0x4
-				0x40003008 0x4>;
-			reg-names =
-				"rxr",
-				"txr",
-				"sr";
+			reg = < 0x40004000 0x4
+					0x40004004 0x4
+					0x40004008 0x4>;
+			reg-names = "rxr",
+						"txr",
+						"sr";
 			status = "disabled";
 		};
 
-		spi0: spi@40004000 {
+		spi0: spi@40006000 {
 			compatible = "mithril,spi";
-			reg = <0x40004000 0x4
-				0x40004004 0x4
-				0x40004008 0x4>;
+			reg = <0x40006000 0x4
+				   0x40006004 0x4
+				   0x40006008 0x4>;
 			reg-names = "cr",
-				"dr",
-				"sr";
+						"dr",
+						"sr";
 			status = "disabled";
 			#address-cells = <1>;
 			#size-cells = <0>;
@@ -73,12 +67,12 @@
 
 		gpio0: gpio@40001000 {
 			compatible = "mithril,gpio";
-			reg = <0x40001000 0x4
-				0x40001004 0x4
-				0x40001008 0x4>;
+			reg = < 0x40001000 0x4
+					0x40001004 0x4
+					0x40001008 0x4>;
 			reg-names = "out",
-				"in",
-				"dbnc";
+						"in",
+						"dbnc";
 			ngpios = <8>;
 			gpio-controller;
 			status = "disabled";

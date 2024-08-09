@@ -22,6 +22,7 @@
 #define _DATA_SECTION_NAME datas
 #define _BSS_SECTION_NAME bss
 #define _NOINIT_SECTION_NAME noinit
+#define _LOADER_SECTION_NAME loader
 
 #define _APP_SMEM_SECTION_NAME		app_smem
 #define _APP_DATA_SECTION_NAME		app_datas
