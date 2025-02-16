@@ -1,0 +1,7 @@
+identifier: mithril_soc
+name: Mithril SoC
+type: mcu
+arch: riscv
+toolchain:
+  - lowrisc_gcc
+vendor: mithril

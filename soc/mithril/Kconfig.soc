@@ -1,0 +1,35 @@
+config SOC_MITHRIL
+	bool
+	help
+	  Mithril system implementation
+
+config INSTR_MEM_SIZE
+	int "Mithril Instruction Memory Size in kB"
+	help
+	  This option specifies the size of the instruction memory size in kB.
+
+config INSTR_MEM_BASE_ADDRESS
+	hex "Mithril Instruction Memory Base Address"
+	default 0x1000000
+	help
+	  This option specifies the base address of Mihtril's instruction memory
+
+config DATA_MEM_SIZE
+	int "Mithril Data Memory Size in kB"
+	help
+	  This option specifies the size of the data memory size in kB.
+
+config DATA_MEM_BASE_ADDRESS
+	hex "Mithril Data Memory Base Address"
+	default 0x2000000
+	help
+	  This option specifies the base address of Mihtril's data memory
+
+config BOOT_ARGS_SIZE
+	int "Boot Arguments Size in bytes"
+	default 256
+	help
+	  This option specifies the size of the boot arguments in bytes.
+
+config SOC
+	default "mithril" if SOC_MITHRIL

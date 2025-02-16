@@ -1,0 +1,36 @@
+config HAS_MITHRIL_HAL
+	bool
+
+if HAS_MITHRIL_HAL
+
+config USE_MITHRIL_HAL_DSEE_HASH
+	bool
+    help
+        Enable Mithril HAL DSEE HASH module driver
+
+config USE_MITHRIL_HAL_UART
+	bool
+    help
+        Enable Mithril HAL UART module driver
+
+config USE_MITHRIL_HAL_TIMER
+	bool
+    help
+        Enable Mithril HAL TIMER module driver
+
+config USE_MITHRIL_HAL_GPIO
+	bool
+    help
+        Enable Mithril HAL GPIO module driver
+
+config USE_MITHRIL_HAL_SPI
+	bool
+    help
+        Enable Mithril HAL SPI module driver
+
+config USE_MITHRIL_HAL_TRNG
+	bool
+    help
+        Enable Mithril HAL TRNG module driver
+
+endif # HAS_MITHRIL_HAL

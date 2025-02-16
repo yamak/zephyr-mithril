@@ -1,0 +1,18 @@
+if SOC_MITHRIL
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 50000000
+
+config NUM_IRQS
+	default 32
+
+config INSTR_MEM_BASE_ADDRESS
+	default 0x1000000
+
+config DATA_MEM_BASE_ADDRESS
+	default 0x2000000
+
+config XIP
+    default n
+
+endif # SOC_MITHRIL

@@ -1,0 +1,11 @@
+description: Mithril True Random Number Generator (TRNG) Based On NeoTrng
+
+compatible: "mithril-trng"
+
+include: base.yaml
+
+properties:
+  reg:
+    required: true
+  interrupts:
+    required: true

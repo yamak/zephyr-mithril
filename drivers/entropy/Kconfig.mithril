@@ -1,0 +1,48 @@
+# Copyright (c) 2025 Yusuf Yamak <yamakyusuf@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig ENTROPY_MITHRIL_TRNG
+	bool "Mithril TRNG driver"
+	default y
+	depends on DT_HAS_MITHRIL_TRNG_ENABLED
+	select USE_MITHRIL_HAL_TRNG
+	select RING_BUFFER
+	select ENTROPY_HAS_DRIVER
+
+if ENTROPY_MITHRIL_TRNG
+
+config ENTROPY_MITHRIL_TRNG_ISR_POOL_SIZE
+	int "Buffer size for ISR-mode random number generation"
+	default 16
+	help
+	  Specifies the size (in bytes) of the buffer that stores hardware-generated
+	  entropy data for interrupt service routine (ISR) consumers.
+	  Note: The pool size must be a power of 2.
+
+config ENTROPY_MITHRIL_TRNG_ISR_THRESHOLD
+	int "Minimum threshold for ISR-mode random number buffer"
+	range 4 $(UINT8_MAX)
+	help
+	  The minimum number of bytes that triggers entropy generation for
+	  interrupt service routine (ISR) consumers. The hardware will start
+	  generating new entropy data when the available bytes in the buffer
+	  fall below this threshold value.
+
+config ENTROPY_MITHRIL_TRNG_THR_POOL_SIZE
+	int "Buffer size for thread-mode random number generation"
+	default 8
+	help
+	  Specifies the size (in bytes) of the buffer that stores hardware-generated
+	  entropy data for thread mode consumers.
+	  Note: The pool size must be a power of 2.
+
+config ENTROPY_MITHRIL_TRNG_THR_THRESHOLD
+	int "Minimum threshold for thread-mode random number buffer"
+	range 4 $(UINT8_MAX)
+	help
+	  The minimum number of bytes that triggers entropy generation for
+	  thread mode consumers. The hardware will start generating new entropy
+	  data when the available bytes in the buffer fall below this threshold
+	  value.
+
+endif # ENTROPY_MITHRIL_TRNG

@@ -1,0 +1,8 @@
+
+config SPI_MITHRIL
+	bool "Mithril SPI controller driver"
+	default y
+	depends on DT_HAS_MITHRIL_SPI_ENABLED
+	select USE_MITHRIL_HAL_SPI
+	help
+	  Enable the SPI peripherals on Mithril

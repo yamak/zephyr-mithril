@@ -163,4 +163,7 @@ source "drivers/spi/Kconfig.max32"
 
 source "drivers/spi/Kconfig.renesas_ra8"
 
+source "drivers/spi/Kconfig.mithril"
+
+
 endif # SPI
