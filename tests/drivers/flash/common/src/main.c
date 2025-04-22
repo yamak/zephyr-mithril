@@ -14,6 +14,8 @@
 #define TEST_AREA_DEV_NODE	DT_INST(0, nordic_qspi_nor)
 #elif defined(CONFIG_SPI_NOR)
 #define TEST_AREA_DEV_NODE	DT_INST(0, jedec_spi_nor)
+#elif defined(CONFIG_FLASH_MSPI_NOR)
+#define TEST_AREA_DEV_NODE	DT_INST(0, jedec_mspi_nor)
 #else
 #define TEST_AREA	storage_partition
 #endif
@@ -325,6 +327,20 @@ static bool flash_callback(const struct flash_pages_info *info, void *data)
 	return true;
 }
 
+ZTEST(flash_driver, test_get_size)
+{
+#if CONFIG_TEST_DRIVER_FLASH_SIZE != -1
+	uint64_t size;
+
+	zassert_ok(flash_get_size(flash_dev, &size));
+	zassert_equal(size, (uint64_t)CONFIG_TEST_DRIVER_FLASH_SIZE, "Expected %llu, got %llu\n",
+		      (uint64_t)CONFIG_TEST_DRIVER_FLASH_SIZE, size);
+#else
+	/* The test is sipped only because there is no uniform way to get device size */
+	ztest_test_skip();
+#endif
+}
+
 ZTEST(flash_driver, test_flash_page_layout)
 {
 	int rc;
@@ -397,8 +413,10 @@ static void test_flash_copy_inner(const struct device *src_dev, off_t src_offset
 
 	if ((expected_result == 0) && (size != 0) && (src_offset != dst_offset)) {
 		/* verify a successful copy */
-		zassert_ok(flash_read(flash_dev, TEST_AREA_OFFSET, expected, EXPECTED_SIZE));
-		for (int i = 0; i < EXPECTED_SIZE; i++) {
+		off_t copy_size = MIN(size, EXPECTED_SIZE);
+
+		zassert_ok(flash_read(flash_dev, TEST_AREA_OFFSET, expected, copy_size));
+		for (int i = 0; i < copy_size; i++) {
 			zassert_equal(buf[i], 0xaa, "incorrect data (%02x) at %d", buf[i], i);
 		}
 	}

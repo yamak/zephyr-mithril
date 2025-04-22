@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2021 2021 Nordic Semiconductor ASA
+ * Copyright (c) 2021-2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/bluetooth/gap.h>
 #include <zephyr/types.h>
 #include <stddef.h>
 #include <errno.h>
@@ -15,6 +16,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/hci_types.h>
 #include <zephyr/bluetooth/iso.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/byteorder.h>
@@ -90,6 +92,9 @@ static void iso_timer_timeout(struct k_work *work)
 static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 			 struct net_buf_simple *ad)
 {
+	const struct bt_le_conn_param *conn_param =
+		BT_LE_CONN_PARAM(BT_GAP_MS_TO_CONN_INTERVAL(60), BT_GAP_MS_TO_CONN_INTERVAL(60), 0,
+				 BT_GAP_MS_TO_CONN_TIMEOUT(4000));
 	char addr_str[BT_ADDR_LE_STR_LEN];
 	int err;
 
@@ -115,8 +120,7 @@ static void device_found(const bt_addr_le_t *addr, int8_t rssi, uint8_t type,
 		return;
 	}
 
-	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, BT_LE_CONN_PARAM_DEFAULT,
-				&default_conn);
+	err = bt_conn_le_create(addr, BT_CONN_LE_CREATE_CONN, conn_param, &default_conn);
 	if (err) {
 		printk("Create conn to %s failed (%u)\n", addr_str, err);
 		start_scan();
@@ -139,18 +143,36 @@ static void start_scan(void)
 
 static void iso_connected(struct bt_iso_chan *chan)
 {
+	const struct bt_iso_chan_path hci_path = {
+		.pid = BT_ISO_DATA_PATH_HCI,
+		.format = BT_HCI_CODING_FORMAT_TRANSPARENT,
+	};
+	int err;
+
 	printk("ISO Channel %p connected\n", chan);
 
 	seq_num = 0U;
 
-	/* Start send timer */
-	k_work_schedule(&iso_send_work, K_MSEC(0));
+	err = bt_iso_setup_data_path(chan, BT_HCI_DATAPATH_DIR_HOST_TO_CTLR, &hci_path);
+	if (err != 0) {
+		printk("Failed to setup ISO TX data path: %d\n", err);
+	} else {
+		/* Start send timer */
+		k_work_schedule(&iso_send_work, K_NO_WAIT);
+	}
 }
 
 static void iso_disconnected(struct bt_iso_chan *chan, uint8_t reason)
 {
+	int err;
+
 	printk("ISO Channel %p disconnected (reason 0x%02x)\n", chan, reason);
 	k_work_cancel_delayable(&iso_send_work);
+
+	err = bt_iso_remove_data_path(chan, BT_HCI_DATAPATH_DIR_HOST_TO_CTLR);
+	if (err != 0) {
+		printk("Failed to setup ISO TX data path: %d\n", err);
+	}
 }
 
 static struct bt_iso_chan_ops iso_ops = {
@@ -162,7 +184,6 @@ static struct bt_iso_chan_io_qos iso_tx = {
 	.sdu = CONFIG_BT_ISO_TX_MTU,
 	.phy = BT_GAP_LE_PHY_2M,
 	.rtn = 1,
-	.path = NULL,
 };
 
 static struct bt_iso_chan_qos iso_qos = {

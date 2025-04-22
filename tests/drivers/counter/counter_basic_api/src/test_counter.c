@@ -51,7 +51,7 @@ static const struct device *const devices[] = {
 #undef DT_DRV_COMPAT
 #undef STM32_COUNTER_DEV
 #endif
-#ifdef CONFIG_COUNTER_NATIVE_POSIX
+#ifdef CONFIG_COUNTER_NATIVE_SIM
 	DEVICE_DT_GET(DT_NODELABEL(counter0)),
 #endif
 #ifdef CONFIG_COUNTER_INFINEON_CAT1
@@ -73,7 +73,7 @@ static const struct device *const devices[] = {
 	DEVS_FOR_DT_COMPAT(nxp_lpc_ctimer)
 #endif
 #ifdef CONFIG_COUNTER_MCUX_RTC
-	DEVS_FOR_DT_COMPAT(nxp_kinetis_rtc)
+	DEVS_FOR_DT_COMPAT(nxp_rtc)
 #endif
 #ifdef CONFIG_COUNTER_MCUX_QTMR
 	DEVS_FOR_DT_COMPAT(nxp_imx_tmr)
@@ -117,23 +117,35 @@ static const struct device *const devices[] = {
 #ifdef CONFIG_COUNTER_TIMER_RPI_PICO
 	DEVS_FOR_DT_COMPAT(raspberrypi_pico_timer)
 #endif
+#ifdef CONFIG_COUNTER_RTC_MAX32
+	DEVS_FOR_DT_COMPAT(adi_max32_rtc_counter)
+#endif
 #ifdef CONFIG_COUNTER_AMBIQ
 	DEVS_FOR_DT_COMPAT(ambiq_counter)
 #endif
 #ifdef CONFIG_COUNTER_MCUX_LPTMR
 	DEVS_FOR_DT_COMPAT(nxp_lptmr)
 #endif
+#ifdef CONFIG_COUNTER_RENESAS_RZ_GTM
+	DEVS_FOR_DT_COMPAT(renesas_rz_gtm_counter)
+#endif
+#ifdef CONFIG_COUNTER_ITE_IT8XXX2
+	DEVS_FOR_DT_COMPAT(ite_it8xxx2_counter)
+#endif
 };
 
 static const struct device *const period_devs[] = {
 #ifdef CONFIG_COUNTER_MCUX_RTC
-	DEVS_FOR_DT_COMPAT(nxp_kinetis_rtc)
+	DEVS_FOR_DT_COMPAT(nxp_rtc)
 #endif
 #ifdef CONFIG_COUNTER_MCUX_LPC_RTC
 	DEVS_FOR_DT_COMPAT(nxp_lpc_rtc)
 #endif
 #ifdef CONFIG_COUNTER_RTC_STM32
 	DEVS_FOR_DT_COMPAT(st_stm32_rtc)
+#endif
+#ifdef CONFIG_COUNTER_RTC_MAX32
+	DEVS_FOR_DT_COMPAT(adi_max32_rtc_counter)
 #endif
 };
 
@@ -873,7 +885,7 @@ static bool late_detection_capable(const struct device *dev)
 	int err = counter_set_guard_period(dev, guard,
 					COUNTER_GUARD_PERIOD_LATE_TO_SET);
 
-	if (err == -ENOTSUP) {
+	if (err == -ENOSYS) {
 		return false;
 	}
 
@@ -1077,7 +1089,7 @@ static bool reliable_cancel_capable(const struct device *dev)
 		return true;
 	}
 #endif
-#ifdef CONFIG_COUNTER_NATIVE_POSIX
+#ifdef CONFIG_COUNTER_NATIVE_SIM
 	if (dev == DEVICE_DT_GET(DT_NODELABEL(counter0))) {
 		return true;
 	}
@@ -1093,6 +1105,11 @@ static bool reliable_cancel_capable(const struct device *dev)
 	}
 #endif
 #ifdef CONFIG_COUNTER_MCUX_RTC
+	if (single_channel_alarm_capable(dev)) {
+		return true;
+	}
+#endif
+#ifdef CONFIG_COUNTER_RENESAS_RZ_GTM
 	if (single_channel_alarm_capable(dev)) {
 		return true;
 	}

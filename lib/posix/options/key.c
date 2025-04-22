@@ -13,14 +13,9 @@
 #include <zephyr/sys/__assert.h>
 #include <zephyr/sys/sem.h>
 
-struct pthread_key_data {
-	sys_snode_t node;
-	pthread_thread_data thread_data;
-};
-
 LOG_MODULE_REGISTER(pthread_key, CONFIG_PTHREAD_KEY_LOG_LEVEL);
 
-static SYS_SEM_DEFINE(pthread_key_lock, 1, 1);
+SYS_SEM_DEFINE(pthread_key_lock, 1, 1);
 
 /* This is non-standard (i.e. an implementation detail) */
 #define PTHREAD_KEY_INITIALIZER (-1)
@@ -31,7 +26,7 @@ static SYS_SEM_DEFINE(pthread_key_lock, 1, 1);
  * the theoretical pthread_key_t range is [0,2147483647].
  */
 BUILD_ASSERT(CONFIG_POSIX_THREAD_KEYS_MAX < PTHREAD_OBJ_MASK_INIT,
-	     "CONFIG_MAX_PTHREAD_KEY_COUNT is too high");
+	     "CONFIG_POSIX_THREAD_KEYS_MAX is too high");
 
 static pthread_key_obj posix_key_pool[CONFIG_POSIX_THREAD_KEYS_MAX];
 SYS_BITARRAY_DEFINE_STATIC(posix_key_bitarray, CONFIG_POSIX_THREAD_KEYS_MAX);

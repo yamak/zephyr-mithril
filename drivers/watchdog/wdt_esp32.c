@@ -1,12 +1,12 @@
 /*
  * Copyright (C) 2017 Intel Corporation
+ * Copyright (c) 2025 Espressif Systems (Shanghai) Co., Ltd.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
 #define DT_DRV_COMPAT espressif_esp32_watchdog
 
-/* Include esp-idf headers first to avoid redefining BIT() macro */
 #if defined(CONFIG_SOC_SERIES_ESP32C6)
 #include <soc/lp_aon_reg.h>
 #else
@@ -19,21 +19,11 @@
 #include <string.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/drivers/clock_control.h>
-#if defined(CONFIG_SOC_SERIES_ESP32C3) || defined(CONFIG_SOC_SERIES_ESP32C6)
-#include <zephyr/drivers/interrupt_controller/intc_esp32c3.h>
-#else
 #include <zephyr/drivers/interrupt_controller/intc_esp32.h>
-#endif
 #include <zephyr/device.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(wdt_esp32, CONFIG_WDT_LOG_LEVEL);
-
-#if defined(CONFIG_SOC_SERIES_ESP32C3) || defined(CONFIG_SOC_SERIES_ESP32C6)
-#define ISR_HANDLER isr_handler_t
-#else
-#define ISR_HANDLER intr_handler_t
-#endif
 
 #define MWDT_TICK_PRESCALER		40000
 #define MWDT_TICKS_PER_US		500
@@ -158,6 +148,7 @@ static int wdt_esp32_init(const struct device *dev)
 {
 	const struct wdt_esp32_config *const config = dev->config;
 	struct wdt_esp32_data *data = dev->data;
+	int ret, flags;
 
 	if (!device_is_ready(config->clock_dev)) {
 		LOG_ERR("clock control device not ready");
@@ -168,12 +159,9 @@ static int wdt_esp32_init(const struct device *dev)
 
 	wdt_hal_init(&data->hal, config->wdt_inst, MWDT_TICK_PRESCALER, true);
 
-	int ret = esp_intr_alloc(config->irq_source,
-				ESP_PRIO_TO_FLAGS(config->irq_priority) |
-				ESP_INT_FLAGS_CHECK(config->irq_flags),
-				(ISR_HANDLER)wdt_esp32_isr,
-				(void *)dev,
-				NULL);
+	flags = ESP_PRIO_TO_FLAGS(config->irq_priority) | ESP_INT_FLAGS_CHECK(config->irq_flags);
+	ret = esp_intr_alloc(config->irq_source, flags, (intr_handler_t)wdt_esp32_isr, (void *)dev,
+			     NULL);
 
 	if (ret != 0) {
 		LOG_ERR("could not allocate interrupt (err %d)", ret);
@@ -187,7 +175,7 @@ static int wdt_esp32_init(const struct device *dev)
 	return 0;
 }
 
-static const struct wdt_driver_api wdt_api = {
+static DEVICE_API(wdt, wdt_api) = {
 	.setup = wdt_esp32_set_config,
 	.disable = wdt_esp32_disable,
 	.install_timeout = wdt_esp32_install_timeout,

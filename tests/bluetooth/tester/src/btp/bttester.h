@@ -53,6 +53,8 @@ void tester_register_command_handlers(uint8_t service,
 				      const struct btp_handler *handlers,
 				      size_t num);
 
+uint16_t tester_supported_commands(uint8_t service, uint8_t *cmds);
+
 uint8_t tester_init_gatt(void);
 uint8_t tester_unregister_gatt(void);
 
@@ -138,3 +140,6 @@ uint8_t tester_unregister_tmap(void);
 
 uint8_t tester_init_ots(void);
 uint8_t tester_unregister_ots(void);
+
+uint8_t tester_init_pbp(void);
+uint8_t tester_unregister_pbp(void);

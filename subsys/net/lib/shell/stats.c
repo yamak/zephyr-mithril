@@ -368,22 +368,24 @@ static void print_tc_rx_stats(const struct shell *sh, struct net_if *iface)
 	PR("RX traffic class statistics:\n");
 
 #if defined(CONFIG_NET_PKT_RXTIME_STATS)
-	PR("TC  Priority\tRecv pkts\tbytes\ttime\n");
+	PR("TC  Priority\tRecv pkts\tDrop pkts\tbytes\ttime\n");
 
 	for (i = 0; i < NET_TC_RX_COUNT; i++) {
 		net_stats_t count = GET_STAT(iface,
 					     tc.recv[i].rx_time.count);
 		if (count == 0) {
-			PR("[%d] %s (%d)\t%d\t\t%d\t-\n", i,
+			PR("[%d] %s (%d)\t%d\t%d\t\t%d\t-\n", i,
 			   priority2str(GET_STAT(iface, tc.recv[i].priority)),
 			   GET_STAT(iface, tc.recv[i].priority),
 			   GET_STAT(iface, tc.recv[i].pkts),
+			   GET_STAT(iface, tc.recv[i].dropped),
 			   GET_STAT(iface, tc.recv[i].bytes));
 		} else {
-			PR("[%d] %s (%d)\t%d\t\t%d\t%u us%s\n", i,
+			PR("[%d] %s (%d)\t%d\t%d\t\t%d\t%u us%s\n", i,
 			   priority2str(GET_STAT(iface, tc.recv[i].priority)),
 			   GET_STAT(iface, tc.recv[i].priority),
 			   GET_STAT(iface, tc.recv[i].pkts),
+			   GET_STAT(iface, tc.recv[i].dropped),
 			   GET_STAT(iface, tc.recv[i].bytes),
 			   (uint32_t)(GET_STAT(iface,
 					    tc.recv[i].rx_time.sum) /
@@ -392,13 +394,14 @@ static void print_tc_rx_stats(const struct shell *sh, struct net_if *iface)
 		}
 	}
 #else
-	PR("TC  Priority\tRecv pkts\tbytes\n");
+	PR("TC  Priority\tRecv pkts\tDrop pkts\tbytes\n");
 
 	for (i = 0; i < NET_TC_RX_COUNT; i++) {
-		PR("[%d] %s (%d)\t%d\t\t%d\n", i,
+		PR("[%d] %s (%d)\t%d\t%d\t\t%d\n", i,
 		   priority2str(GET_STAT(iface, tc.recv[i].priority)),
 		   GET_STAT(iface, tc.recv[i].priority),
 		   GET_STAT(iface, tc.recv[i].pkts),
+		   GET_STAT(iface, tc.recv[i].dropped),
 		   GET_STAT(iface, tc.recv[i].bytes));
 	}
 #endif /* CONFIG_NET_PKT_RXTIME_STATS */
@@ -467,6 +470,12 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 	   GET_STAT(iface, ipv6_nd.sent),
 	   GET_STAT(iface, ipv6_nd.drop));
 #endif /* CONFIG_NET_STATISTICS_IPV6_ND */
+#if defined(CONFIG_NET_STATISTICS_IPV6_PMTU)
+	PR("IPv6 PMTU recv %d\tsent\t%d\tdrop\t%d\n",
+	   GET_STAT(iface, ipv6_pmtu.recv),
+	   GET_STAT(iface, ipv6_pmtu.sent),
+	   GET_STAT(iface, ipv6_pmtu.drop));
+#endif /* CONFIG_NET_STATISTICS_IPV6_PMTU */
 #if defined(CONFIG_NET_STATISTICS_MLD)
 	PR("IPv6 MLD recv  %d\tsent\t%d\tdrop\t%d\n",
 	   GET_STAT(iface, ipv6_mld.recv),
@@ -491,6 +500,13 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 	   GET_STAT(iface, ip_errors.fragerr),
 	   GET_STAT(iface, ip_errors.chkerr),
 	   GET_STAT(iface, ip_errors.protoerr));
+
+#if defined(CONFIG_NET_STATISTICS_IPV4_PMTU)
+	PR("IPv4 PMTU recv %d\tsent\t%d\tdrop\t%d\n",
+	   GET_STAT(iface, ipv4_pmtu.recv),
+	   GET_STAT(iface, ipv4_pmtu.sent),
+	   GET_STAT(iface, ipv4_pmtu.drop));
+#endif /* CONFIG_NET_STATISTICS_IPV4_PMTU */
 
 #if defined(CONFIG_NET_STATISTICS_ICMP) && defined(CONFIG_NET_NATIVE_IPV4)
 	PR("ICMP recv      %d\tsent\t%d\tdrop\t%d\n",
@@ -542,6 +558,21 @@ static void net_shell_print_statistics(struct net_if *iface, void *user_data)
 	   GET_STAT(iface, dns.recv),
 	   GET_STAT(iface, dns.sent),
 	   GET_STAT(iface, dns.drop));
+#endif /* CONFIG_NET_STATISTICS_DNS */
+#if defined(CONFIG_NET_STATISTICS_PKT_FILTER)
+	PR("Filter drop rx %d"
+	   IF_ENABLED(CONFIG_NET_PKT_FILTER_IPV4_HOOK, ("\tIPv4\t%d"))
+	   IF_ENABLED(CONFIG_NET_PKT_FILTER_IPV6_HOOK, ("\tIPv6\t%d"))
+	   IF_ENABLED(CONFIG_NET_PKT_FILTER_LOCAL_IN_HOOK, ("\tlocal\t%d"))
+	   "\ttx\t%d\n",
+	   GET_STAT(iface, pkt_filter.rx.drop),
+	   IF_ENABLED(CONFIG_NET_PKT_FILTER_IPV4_HOOK,
+		      (GET_STAT(iface, pkt_filter.rx.ipv4_drop),))
+	   IF_ENABLED(CONFIG_NET_PKT_FILTER_IPV6_HOOK,
+		      (GET_STAT(iface, pkt_filter.rx.ipv6_drop),))
+	   IF_ENABLED(CONFIG_NET_PKT_FILTER_LOCAL_IN_HOOK,
+		      (GET_STAT(iface, pkt_filter.rx.local_drop),))
+	   GET_STAT(iface, pkt_filter.tx.drop));
 #endif /* CONFIG_NET_STATISTICS_DNS */
 
 	PR("Bytes received %u\n", GET_STAT(iface, bytes.received));

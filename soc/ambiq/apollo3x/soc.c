@@ -6,7 +6,7 @@
 
 #include <zephyr/init.h>
 
-#include <am_mcu_apollo.h>
+#include <soc.h>
 
 extern void ambiq_power_init(void);
 
@@ -27,5 +27,11 @@ void soc_early_init_hook(void)
 
 #ifdef CONFIG_PM
 	ambiq_power_init();
+#endif
+
+#ifdef CONFIG_LOG_BACKEND_SWO
+	/* Select HFRC/8 (6MHz) for the TPIU clock source */
+	MCUCTRL->TPIUCTRL_b.CLKSEL = MCUCTRL_TPIUCTRL_CLKSEL_HFRCDIV8;
+	MCUCTRL->TPIUCTRL_b.ENABLE = MCUCTRL_TPIUCTRL_ENABLE_EN;
 #endif
 }

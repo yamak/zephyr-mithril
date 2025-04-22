@@ -19,6 +19,7 @@
 #include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/iso.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/types.h>
 
@@ -51,6 +52,7 @@ enum bt_cap_common_proc_type {
 	BT_CAP_COMMON_PROC_TYPE_STOP,
 	BT_CAP_COMMON_PROC_TYPE_BROADCAST_RECEPTION_START,
 	BT_CAP_COMMON_PROC_TYPE_BROADCAST_RECEPTION_STOP,
+	BT_CAP_COMMON_PROC_TYPE_DISTRIBUTE_BROADCAST_CODE,
 	BT_CAP_COMMON_PROC_TYPE_VOLUME_CHANGE,
 	BT_CAP_COMMON_PROC_TYPE_VOLUME_OFFSET_CHANGE,
 	BT_CAP_COMMON_PROC_TYPE_VOLUME_MUTE_CHANGE,
@@ -109,6 +111,18 @@ struct cap_broadcast_reception_stop {
 	uint8_t num_subgroups;
 	struct bt_bap_bass_subgroup subgroups[CONFIG_BT_BAP_BASS_MAX_SUBGROUPS];
 };
+
+/* Note that although the broadcast_code will be the same for all
+ * we nevertheless store a separate copy for each sink, for
+ * consistency in the struct bt_cap_commander_proc_param
+ * There is no memory savings by not having broadcast_code part of the
+ * union: struct cap_broadcast_reception_start uses minimum 20 bytes
+ * and struct cap_distribute_broadcast_code uses 17 bytes
+ */
+struct cap_distribute_broadcast_code {
+	uint8_t src_id;
+	uint8_t broadcast_code[BT_ISO_BROADCAST_CODE_SIZE];
+};
 #endif /* CONFIG_BT_BAP_BROADCAST_ASSISTANT */
 
 struct bt_cap_commander_proc_param {
@@ -131,6 +145,7 @@ struct bt_cap_commander_proc_param {
 #if defined(CONFIG_BT_BAP_BROADCAST_ASSISTANT)
 		struct cap_broadcast_reception_start broadcast_reception_start;
 		struct cap_broadcast_reception_stop broadcast_reception_stop;
+		struct cap_distribute_broadcast_code distribute_broadcast_code;
 #endif /* CONFIG_BT_BAP_BROADCAST_ASSISTANT */
 #if defined(CONFIG_BT_MICP_MIC_CTLR)
 		struct {
@@ -189,12 +204,13 @@ struct bt_cap_common_client {
 
 struct bt_cap_common_proc *bt_cap_common_get_active_proc(void);
 void bt_cap_common_clear_active_proc(void);
-void bt_cap_common_start_proc(enum bt_cap_common_proc_type proc_type, size_t proc_cnt);
+void bt_cap_common_set_proc(enum bt_cap_common_proc_type proc_type, size_t proc_cnt);
 void bt_cap_common_set_subproc(enum bt_cap_common_subproc_type subproc_type);
 bool bt_cap_common_proc_is_type(enum bt_cap_common_proc_type proc_type);
 bool bt_cap_common_subproc_is_type(enum bt_cap_common_subproc_type subproc_type);
 struct bt_conn *bt_cap_common_get_member_conn(enum bt_cap_set_type type,
 					      const union bt_cap_set_member *member);
+bool bt_cap_common_test_and_set_proc_active(void);
 bool bt_cap_common_proc_is_active(void);
 bool bt_cap_common_proc_is_aborted(void);
 bool bt_cap_common_proc_all_handled(void);

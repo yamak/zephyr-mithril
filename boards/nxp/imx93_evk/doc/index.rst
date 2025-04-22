@@ -45,53 +45,7 @@ Cortex®-M33 core. Zephyr OS is ported to run on one of the Cortex®-A55 core.
 Supported Features
 ==================
 
-The Zephyr mimx93_evk board Cortex-A Core configuration supports the following
-hardware features:
-
-+-----------+------------+-------------------------------------+
-| Interface | Controller | Driver/Component                    |
-+===========+============+=====================================+
-| GIC-v4    | on-chip    | interrupt controller                |
-+-----------+------------+-------------------------------------+
-| ARM TIMER | on-chip    | system clock                        |
-+-----------+------------+-------------------------------------+
-| CLOCK     | on-chip    | clock_control                       |
-+-----------+------------+-------------------------------------+
-| PINMUX    | on-chip    | pinmux                              |
-+-----------+------------+-------------------------------------+
-| UART      | on-chip    | serial port                         |
-+-----------+------------+-------------------------------------+
-| GPIO      | on-chip    | GPIO                                |
-+-----------+------------+-------------------------------------+
-| I2C       | on-chip    | i2c                                 |
-+-----------+------------+-------------------------------------+
-| SPI       | on-chip    | spi                                 |
-+-----------+------------+-------------------------------------+
-| CAN       | on-chip    | can                                 |
-+-----------+------------+-------------------------------------+
-| TPM       | on-chip    | TPM Counter                         |
-+-----------+------------+-------------------------------------+
-| ENET      | on-chip    | ethernet port                       |
-+-----------+------------+-------------------------------------+
-
-The Zephyr imx93_evk board Cortex-M33 configuration supports the following
-hardware features:
-
-+-----------+------------+-------------------------------------+
-| Interface | Controller | Driver/Component                    |
-+===========+============+=====================================+
-| NVIC      | on-chip    | interrupt controller                |
-+-----------+------------+-------------------------------------+
-| SYSTICK   | on-chip    | systick                             |
-+-----------+------------+-------------------------------------+
-| CLOCK     | on-chip    | clock_control                       |
-+-----------+------------+-------------------------------------+
-| PINMUX    | on-chip    | pinmux                              |
-+-----------+------------+-------------------------------------+
-| UART      | on-chip    | serial port                         |
-+-----------+------------+-------------------------------------+
-| GPIO      | on-chip    | GPIO                                |
-+-----------+------------+-------------------------------------+
+.. zephyr:board-supported-hw::
 
 Devices
 ========
@@ -161,6 +115,8 @@ Note: The overlay only supports ``mimx9352/a55``, but can be extended to support
 
 Programming and Debugging (A55)
 *******************************
+
+.. zephyr:board-supported-runners::
 
 U-Boot "cpu" command is used to load and kick Zephyr to Cortex-A secondary Core, Currently
 it is supported in : `Real-Time Edge U-Boot`_ (use the branch "uboot_vxxxx.xx-y.y.y,
@@ -240,9 +196,25 @@ prompt.
 
 Use U-Boot to load and kick zephyr.bin to Cortex-M33 Core:
 
+Boot with code from TCM
+=======================
+
 .. code-block:: console
 
     load mmc 1:1 0x80000000 zephyr.bin;cp.b 0x80000000 0x201e0000 0x30000;bootaux 0x1ffe0000 0
+
+Boot with code from DDR
+=======================
+
+.. code-block:: console
+
+    load mmc 1:1 0x84000000 zephyr.bin;dcache flush;bootaux 0x84000000 0
+
+Note: Cortex M33 need execute permission to run code from DDR memory. In order
+to enable this, `imx-atf`_ can to be modified in "plat/imx/imx93/trdc_config.h".
+
+.. _imx-atf:
+    https://github.com/nxp-imx/imx-atf
 
 Use this configuration to run basic Zephyr applications and kernel tests,
 for example, with the :zephyr:code-sample:`synchronization` sample:
@@ -367,3 +339,6 @@ This board has been designed for SOF so it's only intended to be used with SOF.
 
 TODO: document the SOF build process for this board. For now, the support for
 i.MX93 is still in review and has yet to merged on SOF side.
+
+.. include:: ../../common/board-footer.rst
+   :start-after: nxp-board-footer

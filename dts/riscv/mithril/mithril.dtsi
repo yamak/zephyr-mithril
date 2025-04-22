@@ -72,7 +72,8 @@
 
 		mtimer: timer@40002000 {
 			compatible = "mithril,machine-timer";
-			reg = <0x40002000 0x1000>;
+			reg = <0x40002000 0x8 0x40002008 0x8>;
+			reg-names = "mtime", "mtimecmp";
 			interrupt-parent = <&intc>;
 			interrupts = <7 0>;
 			status = "disabled";

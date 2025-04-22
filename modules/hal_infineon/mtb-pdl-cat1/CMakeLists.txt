@@ -33,7 +33,6 @@ zephyr_library_sources(${pdl_drv_dir}/source/TOOLCHAIN_GCC_ARM/cy_syslib_ext.S)
 
 # Peripheral drivers
 zephyr_library_sources_ifdef(CONFIG_SOC_FAMILY_PSOC6_LEGACY      ${pdl_drv_dir}/source/cy_sysint.c)
-zephyr_library_sources_ifdef(CONFIG_USE_INFINEON_ADC      ${pdl_drv_dir}/source/cy_sar.c)
 zephyr_library_sources_ifdef(CONFIG_USE_INFINEON_I2C      ${pdl_drv_dir}/source/cy_scb_i2c.c)
 zephyr_library_sources_ifdef(CONFIG_USE_INFINEON_LPTIMER  ${pdl_drv_dir}/source/cy_mcwdt.c)
 zephyr_library_sources_ifdef(CONFIG_USE_INFINEON_PWM      ${pdl_drv_dir}/source/cy_tcpwm_pwm.c)
@@ -61,7 +60,7 @@ if(CONFIG_USE_INFINEON_UART OR CONFIG_USE_INFINEON_I2C OR CONFIG_USE_INFINEON_SP
   zephyr_library_sources(${pdl_drv_dir}/source/cy_scb_common.c)
 endif()
 
-if(CONFIG_USE_INFINEON_ADC OR CONFIG_USE_INFINEON_SMIF)
+if(CONFIG_USE_INFINEON_DMA OR CONFIG_USE_INFINEON_ADC OR CONFIG_USE_INFINEON_SMIF)
   zephyr_library_sources(${pdl_drv_dir}/source/cy_dma.c)
   zephyr_library_sources(${pdl_drv_dir}/source/cy_dmac.c)
 endif()
@@ -90,12 +89,15 @@ if(CONFIG_SOC_FAMILY_INFINEON_CAT1B)
   zephyr_library_sources(${pdl_drv_dir}/source/cy_systick_v2.c)
   zephyr_library_sources(${pdl_drv_dir}/source/cy_syspm_v2.c)
   zephyr_library_sources(${pdl_drv_dir}/source/cy_syspm_btss.c)
+  zephyr_library_sources(${pdl_drv_dir}/source/cy_syspm_ppu.c)
+  zephyr_library_sources(${pdl_drv_dir}/source/ppu_v1.c)
 endif()
 zephyr_library_sources(${pdl_drv_dir}/source/cy_syslib.c)
 zephyr_library_sources(${pdl_drv_dir}/source/cy_syspm.c)
 zephyr_library_sources(${pdl_drv_dir}/source/cy_systick.c)
 zephyr_library_sources(${pdl_drv_dir}/source/cy_trigmux.c)
 zephyr_library_sources(${pdl_drv_dir}/source/cy_wdt.c)
+zephyr_library_sources(${pdl_drv_dir}/source/cy_tcpwm_pwm.c)
 
 # add IPC_BT driver for CYW208XX devices
 zephyr_library_sources_ifdef(CONFIG_BT_CYW208XX  ${pdl_drv_dir}/source/cy_ipc_bt.c)
