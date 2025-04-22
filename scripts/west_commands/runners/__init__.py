@@ -5,7 +5,7 @@
 import importlib
 import logging
 
-from runners.core import ZephyrBinaryRunner, MissingProgram
+from runners.core import MissingProgram, ZephyrBinaryRunner
 
 _logger = logging.getLogger('runners')
 
@@ -31,6 +31,7 @@ _names = [
     'canopen_program',
     'dediprog',
     'dfu',
+    'ecpprog',
     'esp32',
     'ezflashcli',
     'gd32isp',
@@ -40,6 +41,7 @@ _names = [
     'jlink',
     'linkserver',
     'mdb',
+    'minichlink',
     'misc',
     'native',
     'nios2',
@@ -53,10 +55,12 @@ _names = [
     'qemu',
     'renode',
     'renode-robot',
+    'rfp',
     'silabs_commander',
     'spi_burn',
     'stm32cubeprogrammer',
     'stm32flash',
+    'sy1xx',
     'teensy',
     'trace32',
     'uf2',
@@ -73,6 +77,6 @@ def get_runner_cls(runner):
     for cls in ZephyrBinaryRunner.get_runners():
         if cls.name() == runner:
             return cls
-    raise ValueError('unknown runner "{}"'.format(runner))
+    raise ValueError(f'unknown runner "{runner}"')
 
-__all__ = ['ZephyrBinaryRunner', 'get_runner_cls']
+__all__ = ['ZephyrBinaryRunner', 'MissingProgram', 'get_runner_cls']

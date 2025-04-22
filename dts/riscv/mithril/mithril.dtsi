@@ -71,10 +71,10 @@
 		};
 
 		mtimer: timer@40002000 {
-			compatible = "mithril,machine-timer";
-			reg = <0x40002000 0x1000>;
-			interrupt-parent = <&intc>;
-			interrupts = <7 0>;
+			compatible = "riscv,machine-timer";
+			reg = <0x40002000 0x8 0x40002008 0x8>;
+			reg-names = "mtime", "mtimecmp";
+			interrupts-extended = <&intc 7>;
 			status = "disabled";
 		};
 

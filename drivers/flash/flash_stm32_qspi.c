@@ -755,6 +755,15 @@ flash_stm32_qspi_get_parameters(const struct device *dev)
 	return &flash_stm32_qspi_parameters;
 }
 
+static int flash_stm32_qspi_get_size(const struct device *dev, uint64_t *size)
+{
+	const struct flash_stm32_qspi_config *dev_cfg = dev->config;
+
+	*size = (uint64_t)dev_cfg->flash_size;
+
+	return 0;
+}
+
 static void flash_stm32_qspi_isr(const struct device *dev)
 {
 	struct flash_stm32_qspi_data *dev_data = dev->data;
@@ -876,11 +885,12 @@ static void flash_stm32_qspi_pages_layout(const struct device *dev,
 }
 #endif
 
-static const struct flash_driver_api flash_stm32_qspi_driver_api = {
+static DEVICE_API(flash, flash_stm32_qspi_driver_api) = {
 	.read = flash_stm32_qspi_read,
 	.write = flash_stm32_qspi_write,
 	.erase = flash_stm32_qspi_erase,
 	.get_parameters = flash_stm32_qspi_get_parameters,
+	.get_size = flash_stm32_qspi_get_size,
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
 	.page_layout = flash_stm32_qspi_pages_layout,
 #endif
@@ -1607,7 +1617,7 @@ static const struct flash_stm32_qspi_config flash_stm32_qspi_cfg = {
 		.bus = DT_CLOCKS_CELL(STM32_QSPI_NODE, bus)
 	},
 	.irq_config = flash_stm32_qspi_irq_config_func,
-	.flash_size = DT_INST_REG_ADDR_BY_IDX(0, 1) << STM32_QSPI_DOUBLE_FLASH,
+	.flash_size = DT_INST_REG_SIZE(0) << STM32_QSPI_DOUBLE_FLASH,
 	.max_frequency = DT_INST_PROP(0, qspi_max_frequency),
 	.pcfg = PINCTRL_DT_DEV_CONFIG_GET(STM32_QSPI_NODE),
 #if STM32_QSPI_RESET_GPIO

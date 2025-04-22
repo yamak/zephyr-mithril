@@ -73,7 +73,7 @@ LOG_MODULE_REGISTER(crypto_mithril_dsee, CONFIG_CRYPTO_LOG_LEVEL);
 #define IRQN            DT_INST_IRQN(0)
 #define IRQ_PRIO        DT_INST_IRQ(0, priority)
 
-#define MAX_SHA_SESSION_COUNT 48
+#define MAX_SHA_SESSION_COUNT 8
 
 #define SESSION_INDEX(session, buffer) \
     (((size_t)(session) - (size_t)(buffer)) / sizeof(struct sha_session))

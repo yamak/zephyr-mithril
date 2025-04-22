@@ -71,7 +71,7 @@ static int gpio_nrfx_gpd_retain_set(const struct device *port, uint32_t mask, gp
 		int ret;
 
 		if (flags & GPIO_OUTPUT) {
-			cfg->port->RETAINSET = mask;
+			nrf_gpio_port_retain_enable(cfg->port, mask);
 		}
 
 		ret = nrf_gpd_release(NRF_GPD_FAST_ACTIVE1);
@@ -101,7 +101,7 @@ static int gpio_nrfx_gpd_retain_clear(const struct device *port, uint32_t mask)
 			return ret;
 		}
 
-		cfg->port->RETAINCLR = mask;
+		nrf_gpio_port_retain_disable(cfg->port, mask);
 	}
 #else
 	ARG_UNUSED(port);
@@ -240,6 +240,73 @@ end:
 	(void)gpio_nrfx_gpd_retain_set(port, BIT(pin), flags);
 	return ret;
 }
+
+#ifdef CONFIG_GPIO_GET_CONFIG
+static int gpio_nrfx_pin_get_config(const struct device *port, gpio_pin_t pin,
+				    gpio_flags_t *flags)
+{
+	const struct gpio_nrfx_cfg *cfg = get_port_cfg(port);
+	nrfx_gpiote_pin_t abs_pin = NRF_GPIO_PIN_MAP(cfg->port_num, pin);
+
+	*flags = 0U;
+
+	nrf_gpio_pin_dir_t dir = nrf_gpio_pin_dir_get(abs_pin);
+
+	if (dir == NRF_GPIO_PIN_DIR_OUTPUT) {
+		*flags |= GPIO_OUTPUT;
+	}
+
+	nrf_gpio_pin_input_t input = nrf_gpio_pin_input_get(abs_pin);
+
+	if (input == NRF_GPIO_PIN_INPUT_CONNECT) {
+		*flags |= GPIO_INPUT;
+	}
+
+	nrf_gpio_pin_pull_t pull = nrf_gpio_pin_pull_get(abs_pin);
+
+	switch (pull) {
+	case NRF_GPIO_PIN_PULLUP:
+		*flags |= GPIO_PULL_UP;
+	case NRF_GPIO_PIN_PULLDOWN:
+		*flags |= GPIO_PULL_DOWN;
+	default:
+		break;
+	}
+
+	nrf_gpio_pin_drive_t drive = nrf_gpio_pin_drive_get(abs_pin);
+
+	switch (drive) {
+	case NRF_GPIO_PIN_S0S1:
+		*flags |= NRF_GPIO_DRIVE_S0S1;
+		break;
+	case NRF_GPIO_PIN_S0H1:
+		*flags |= NRF_GPIO_DRIVE_S0H1;
+		break;
+	case NRF_GPIO_PIN_H0S1:
+		*flags |= NRF_GPIO_DRIVE_H0S1;
+		break;
+	case NRF_GPIO_PIN_H0H1:
+		*flags |= NRF_GPIO_DRIVE_H0H1;
+		break;
+	case NRF_GPIO_PIN_S0D1:
+		*flags |= NRF_GPIO_DRIVE_S0 | GPIO_OPEN_DRAIN;
+		break;
+	case NRF_GPIO_PIN_H0D1:
+		*flags |= NRF_GPIO_DRIVE_H0 | GPIO_OPEN_DRAIN;
+		break;
+	case NRF_GPIO_PIN_D0S1:
+		*flags |= NRF_GPIO_DRIVE_S1 | GPIO_OPEN_SOURCE;
+		break;
+	case NRF_GPIO_PIN_D0H1:
+		*flags |= NRF_GPIO_DRIVE_H1 | GPIO_OPEN_SOURCE;
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+#endif
 
 static int gpio_nrfx_port_get_raw(const struct device *port,
 				  gpio_port_value_t *value)
@@ -506,7 +573,7 @@ static int gpio_nrfx_init(const struct device *port)
 	return 0;
 }
 
-static const struct gpio_driver_api gpio_nrfx_drv_api_funcs = {
+static DEVICE_API(gpio, gpio_nrfx_drv_api_funcs) = {
 	.pin_configure = gpio_nrfx_pin_configure,
 	.port_get_raw = gpio_nrfx_port_get_raw,
 	.port_set_masked_raw = gpio_nrfx_port_set_masked_raw,
@@ -519,6 +586,9 @@ static const struct gpio_driver_api gpio_nrfx_drv_api_funcs = {
 #endif
 #ifdef CONFIG_GPIO_GET_DIRECTION
 	.port_get_direction = gpio_nrfx_port_get_direction,
+#endif
+#ifdef CONFIG_GPIO_GET_CONFIG
+	.pin_get_config = gpio_nrfx_pin_get_config,
 #endif
 };
 

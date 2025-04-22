@@ -260,12 +260,13 @@ static uint16_t interval_to_sync_timeout(uint16_t pa_interval)
 		/* Use maximum value to maximize chance of success */
 		pa_timeout = BT_GAP_PER_ADV_MAX_TIMEOUT;
 	} else {
-		uint32_t interval_ms;
+		uint32_t interval_us;
 		uint32_t timeout;
 
 		/* Add retries and convert to unit in 10's of ms */
-		interval_ms = BT_GAP_PER_ADV_INTERVAL_TO_MS(pa_interval);
-		timeout = (interval_ms * PA_SYNC_INTERVAL_TO_TIMEOUT_RATIO) / 10;
+		interval_us = BT_GAP_PER_ADV_INTERVAL_TO_US(pa_interval);
+		timeout = BT_GAP_US_TO_PER_ADV_SYNC_TIMEOUT(interval_us) *
+			  PA_SYNC_INTERVAL_TO_TIMEOUT_RATIO;
 
 		/* Enforce restraints */
 		pa_timeout = CLAMP(timeout, BT_GAP_PER_ADV_MIN_TIMEOUT, BT_GAP_PER_ADV_MAX_TIMEOUT);
@@ -382,8 +383,7 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info,
 			printk("Connecting to Broadcast Sink: %s\n", sr_info.bt_name);
 
 			err = bt_conn_le_create(info->addr, BT_CONN_LE_CREATE_CONN,
-						BT_LE_CONN_PARAM_DEFAULT,
-						&broadcast_sink_conn);
+						BT_BAP_CONN_PARAM_RELAXED, &broadcast_sink_conn);
 			if (err != 0) {
 				printk("Failed creating connection (err=%u)\n", err);
 				scan_for_broadcast_sink();

@@ -103,7 +103,17 @@ SECTIONS
 
     SECTION_PROLOGUE(rom_start,,)
     {
-		. = ALIGN(16);
+        . = ALIGN(16);
+        HIDDEN(__rom_start_address = .);
+        
+        /*
+		* Vector table must be placed at the beginning of ROM memory.
+		* RISC-V hardware expects to find the vector table (containing reset vector
+		* and interrupt handlers) at address 0x0 after reset.
+		*/
+        KEEP(*(.vector_table.*))
+        KEEP(*(.reset_handler.*))
+        
 /* Located in generated directory. This file is populated by calling
  * zephyr_linker_sources(ROM_START ...).
  */

@@ -7,6 +7,7 @@
 
 #include <string.h>
 
+#include <zephyr/cache.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/init.h>
 #include <zephyr/logging/log.h>
@@ -14,7 +15,7 @@
 #include <zephyr/toolchain.h>
 
 #include <hal/nrf_vpr.h>
-#if defined(CONFIG_SOC_NRF54L15_CPUAPP) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#if defined(CONFIG_SOC_NRF54L_CPUAPP_COMMON) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 #include <hal/nrf_spu.h>
 #endif
 
@@ -33,15 +34,25 @@ static int nordic_vpr_launcher_init(const struct device *dev)
 {
 	const struct nordic_vpr_launcher_config *config = dev->config;
 
+	/* Do nothing if execution memory is not specified for a given VPR. */
+	if (config->exec_addr == 0) {
+		return 0;
+	}
+
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(source_memory)
 	if (config->size > 0U) {
 		LOG_DBG("Loading VPR (%p) from %p to %p (%zu bytes)", config->vpr,
 			(void *)config->src_addr, (void *)config->exec_addr, config->size);
 		memcpy((void *)config->exec_addr, (void *)config->src_addr, config->size);
+#if defined(CONFIG_DCACHE)
+		LOG_DBG("Writing back cache with loaded VPR (from %p %zu bytes)",
+			(void *)config->exec_addr, config->size);
+		sys_cache_data_flush_range((void *)config->exec_addr, config->size);
+#endif
 	}
 #endif
 
-#if defined(CONFIG_SOC_NRF54L15_CPUAPP) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
+#if defined(CONFIG_SOC_NRF54L_CPUAPP_COMMON) && !defined(CONFIG_TRUSTED_EXECUTION_NONSECURE)
 	nrf_spu_periph_perm_secattr_set(NRF_SPU00, nrf_address_slave_get((uint32_t)config->vpr),
 					true);
 #endif
@@ -57,16 +68,20 @@ static int nordic_vpr_launcher_init(const struct device *dev)
 	(DT_REG_ADDR(node_id) +                                                                    \
 	 COND_CODE_0(DT_FIXED_PARTITION_EXISTS(node_id), (0), (DT_REG_ADDR(DT_GPARENT(node_id)))))
 
+#define NEEDS_COPYING(inst) UTIL_AND(DT_INST_NODE_HAS_PROP(inst, execution_memory),                \
+				     DT_INST_NODE_HAS_PROP(inst, source_memory))
+
 #define NORDIC_VPR_LAUNCHER_DEFINE(inst)                                                           \
-	IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, source_memory),                                     \
+	IF_ENABLED(NEEDS_COPYING(inst),                                                            \
 		   (BUILD_ASSERT((DT_REG_SIZE(DT_INST_PHANDLE(inst, execution_memory)) <=          \
 				  DT_REG_SIZE(DT_INST_PHANDLE(inst, source_memory))),              \
 				 "Execution memory exceeds source memory size");))                 \
                                                                                                    \
 	static const struct nordic_vpr_launcher_config config##inst = {                            \
 		.vpr = (NRF_VPR_Type *)DT_INST_REG_ADDR(inst),                                     \
-		.exec_addr = VPR_ADDR(DT_INST_PHANDLE(inst, execution_memory)),                    \
-		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, source_memory),                             \
+		IF_ENABLED(DT_INST_NODE_HAS_PROP(inst, execution_memory),                          \
+			   (.exec_addr = VPR_ADDR(DT_INST_PHANDLE(inst, execution_memory)),))      \
+		IF_ENABLED(NEEDS_COPYING(inst),                                                    \
 			   (.src_addr = VPR_ADDR(DT_INST_PHANDLE(inst, source_memory)),            \
 			    .size = DT_REG_SIZE(DT_INST_PHANDLE(inst, execution_memory)),))};      \
                                                                                                    \

@@ -13,9 +13,7 @@
 #include <zephyr/pm/policy.h>
 
 #include "uart_pl011_registers.h"
-#include <am_mcu_apollo.h>
-
-#define PWRCTRL_MAX_WAIT_US 5
+#include <soc.h>
 
 static inline void pl011_ambiq_enable_clk(const struct device *dev)
 {
@@ -39,6 +37,16 @@ static inline int pl011_ambiq_clk_set(const struct device *dev, uint32_t clk)
 	case 24000000:
 		clksel = PL011_CR_AMBIQ_CLKSEL_24MHZ;
 		break;
+#if !defined(CONFIG_SOC_SERIES_APOLLO3X)
+	case 48000000:
+		clksel = PL011_CR_AMBIQ_CLKSEL_48MHZ;
+		break;
+#if !defined(CONFIG_SOC_SERIES_APOLLO4X)
+	case AM_HAL_UART_PLLCLK_FREQ:
+		clksel = PL011_CR_AMBIQ_CLKSEL_PLL;
+		break;
+#endif
+#endif
 	default:
 		return -EINVAL;
 	}
