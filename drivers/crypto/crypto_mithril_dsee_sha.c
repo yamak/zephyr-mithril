@@ -174,7 +174,6 @@ static int mithril_dsee_hash_handler(struct hash_ctx *ctx, struct hash_pkt *pkt,
 	struct sha_session *session = ctx->drv_sessn_state;
 	uint32_t session_id = SESSION_INDEX(session, data->session_buffer);
 	mithril_dsee_wait_idle();
-	mithril_dsee_restore_context(&session->dsee_ctx);
 	data->current_ctx = ctx;
 
     if (!session->started) {
@@ -183,7 +182,11 @@ static int mithril_dsee_hash_handler(struct hash_ctx *ctx, struct hash_pkt *pkt,
         mithril_dsee_hash_init();
         session->started = true;
     }
+	else
+	{
+		mithril_dsee_restore_context(&session->dsee_ctx);
 
+	}
 	uint16_t flags = ctx->flags;
 
 	if (flags & CAP_SYNC_OPS) {
