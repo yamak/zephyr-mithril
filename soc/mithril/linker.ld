@@ -77,7 +77,13 @@ MEMORY
 }
 /*_entry_point = ROM_BASE + 0x80;
 ENTRY(_entry_point)*/
+
 ENTRY(CONFIG_KERNEL_ENTRY)
+LOADER_TRAMP_OFFSET = LENGTH(ROM) - 4;
+PROVIDE(__loader_relocated_tramp = LOADER_TRAMP_OFFSET);
+
+__instr_memory_base = ORIGIN(ROM);
+__data_memory_base = ORIGIN(RAM);
 
 SECTIONS
     {
