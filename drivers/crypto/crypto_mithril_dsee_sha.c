@@ -190,12 +190,12 @@ static int mithril_dsee_hash_handler(struct hash_ctx *ctx, struct hash_pkt *pkt,
 	uint16_t flags = ctx->flags;
 
 	if (flags & CAP_SYNC_OPS) {
-		mithril_dsee_enable_irq(DSEE_IT_DIN_READY, false);
-		mithril_dsee_enable_irq(DSEE_IT_DV, false);
+		mithril_dsee_enable_interrupt(DSEE_IT_DIN_READY, false);
+		mithril_dsee_enable_interrupt(DSEE_IT_DV, false);
 	} else {
 		data->pending_pkt = pkt;
-		mithril_dsee_enable_irq(DSEE_IT_DIN_READY, true);
-		mithril_dsee_enable_irq(DSEE_IT_DV, true);
+		mithril_dsee_enable_interrupt(DSEE_IT_DIN_READY, true);
+		mithril_dsee_enable_interrupt(DSEE_IT_DV, true);
 	}
 	if (pkt->in_len > 0) {
 		mithril_dsee_write_hash_data_range((uint32_t)pkt->in_buf,
@@ -229,8 +229,8 @@ static int mithril_dsee_hash_handler(struct hash_ctx *ctx, struct hash_pkt *pkt,
 	}
 	// Restore the interrupt enable flags
 	if (flags & CAP_ASYNC_OPS) {
-		mithril_dsee_enable_irq(DSEE_IT_DIN_READY, false);
-		mithril_dsee_enable_irq(DSEE_IT_DV, false);
+		mithril_dsee_enable_interrupt(DSEE_IT_DIN_READY, false);
+		mithril_dsee_enable_interrupt(DSEE_IT_DV, false);
 	}
 	mithril_dsee_wait_idle();
 	mithril_dsee_save_context(&session->dsee_ctx);
@@ -320,8 +320,8 @@ static int mithril_dsee_init(const struct device *dev)
 	mithril_dsee_clear_flag(DSEE_IT_DV);
 	mithril_dsee_clear_flag(DSEE_IT_DIN_READY);
 
-	mithril_dsee_enable_irq(DSEE_IT_DIN_READY, false);
-	mithril_dsee_enable_irq(DSEE_IT_DV, false);
+	mithril_dsee_enable_interrupt(DSEE_IT_DIN_READY, false);
+	mithril_dsee_enable_interrupt(DSEE_IT_DV, false);
 
 	mithril_dsee_enable_auto_fetch(true);
 

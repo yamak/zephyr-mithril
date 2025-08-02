@@ -210,7 +210,7 @@ static int entropy_mithril_init(const struct device *dev)
 	k_sem_init(&dev_data->sem_sync, 0, 1);
 
 	mithril_trng_enable(true);
-	mithril_trng_enable_irq(TRNG_IT_READY, true);
+	mithril_trng_enable_interrupt(TRNG_IT_READY, true);
 	IRQ_CONNECT(IRQN, IRQ_PRIO, isr, &entropy_mithril_data, 0);
 	irq_enable(IRQN);
 
