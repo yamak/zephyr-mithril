@@ -1057,9 +1057,6 @@ static int lwm2m_write_handler_opaque(struct lwm2m_engine_obj_inst *obj_inst,
 				return ret;
 			}
 		}
-		if (msg->in.block_ctx && !last_pkt_block) {
-			msg->in.block_ctx->ctx.current += len;
-		}
 		opaque_ctx.offset += len;
 		written += len;
 	}
@@ -1401,7 +1398,7 @@ static int lwm2m_read_cached_data(struct lwm2m_message *msg,
 	struct lwm2m_cache_read_entry *read_info;
 	size_t  length = lwm2m_cache_size(cached_data);
 
-	LOG_DBG("Read cached data size %u", length);
+	LOG_DBG("Read cached data size %zu", length);
 
 	if (msg->cache_info) {
 		read_info = &msg->cache_info->read_info[msg->cache_info->entry_size];
@@ -1411,7 +1408,7 @@ static int lwm2m_read_cached_data(struct lwm2m_message *msg,
 		msg->cache_info->entry_size++;
 		if (msg->cache_info->entry_limit) {
 			length = MIN(length, msg->cache_info->entry_limit);
-			LOG_DBG("Limited number of read %d", length);
+			LOG_DBG("Limited number of read %zu", length);
 		}
 	}
 
@@ -2650,6 +2647,7 @@ static int lwm2m_response_promote_to_con(struct lwm2m_message *msg)
 
 	msg->type = COAP_TYPE_CON;
 	msg->mid = coap_next_id();
+	msg->acknowledged = false;
 
 	/* Since the response CoAP packet is already generated at this point,
 	 * tweak the specific fields manually:
@@ -2882,6 +2880,16 @@ void lwm2m_udp_receive(struct lwm2m_ctx *client_ctx, uint8_t *buf, uint16_t buf_
 		}
 
 		LOG_DBG("reply %p handled and removed", reply);
+		goto client_unlock;
+	} else if (pending && coap_header_get_type(&response) == COAP_TYPE_RESET) {
+		msg = find_msg(pending, NULL);
+		if (msg == NULL) {
+			LOG_ERR("Orphaned pending %p.", pending);
+			coap_pending_clear(pending);
+			goto client_unlock;
+		}
+
+		lwm2m_reset_message(msg, true);
 		goto client_unlock;
 	}
 
@@ -3203,6 +3211,7 @@ msg_init:
 	obs->active_notify = msg;
 	obs->resource_update = false;
 	lwm2m_information_interface_send(msg);
+	lwm2m_engine_observer_refresh_notified_values(obs);
 #if defined(CONFIG_LWM2M_RESOURCE_DATA_CACHE_SUPPORT)
 	msg->cache_info = NULL;
 #endif
@@ -3295,6 +3304,10 @@ int lwm2m_perform_composite_read_op(struct lwm2m_message *msg, uint16_t content_
 
 		ret = lwm2m_perform_read_object_instance(msg, obj_inst, &num_read);
 		if (ret == -ENOMEM) {
+			if (num_read > 0) {
+				/* Return what we have read so far */
+				goto put_end;
+			}
 			return ret;
 		}
 	}
@@ -3303,6 +3316,7 @@ int lwm2m_perform_composite_read_op(struct lwm2m_message *msg, uint16_t content_
 		return -ENOENT;
 	}
 
+put_end:
 	/* Add object end mark */
 	if (engine_put_end(&msg->out, &msg->path) < 0) {
 		return -ENOMEM;

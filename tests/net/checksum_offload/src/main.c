@@ -333,7 +333,7 @@ static int eth_tx_offloading_disabled(const struct device *dev,
 
 	zassert_equal_ptr(&eth_context_offloading_disabled, context,
 			  "Context pointers do not match (%p vs %p)",
-			  eth_context_offloading_disabled, context);
+			  &eth_context_offloading_disabled, context);
 
 	if (!pkt->buffer) {
 		DBG("No data to send!\n");
@@ -377,7 +377,7 @@ static int eth_tx_offloading_enabled(const struct device *dev,
 
 	zassert_equal_ptr(&eth_context_offloading_enabled, context,
 			  "Context pointers do not match (%p vs %p)",
-			  eth_context_offloading_enabled, context);
+			  &eth_context_offloading_enabled, context);
 
 	if (!pkt->buffer) {
 		DBG("No data to send!\n");
@@ -874,7 +874,7 @@ static void test_tx_chksum_icmp_frag(sa_family_t family, bool offloaded)
 
 	test_icmp_init(family, offloaded, &dst_addr, &iface);
 
-	ret = net_icmp_init_ctx(&ctx, 0, 0, dummy_icmp_handler);
+	ret = net_icmp_init_ctx(&ctx, family, 0, 0, dummy_icmp_handler);
 	zassert_equal(ret, 0, "Cannot init ICMP (%d)", ret);
 
 	test_started = true;
@@ -1210,7 +1210,7 @@ static void test_rx_chksum_icmp_frag(sa_family_t family, bool offloaded)
 
 	test_icmp_init(family, offloaded, &dst_addr, &iface);
 
-	ret = net_icmp_init_ctx(&ctx,
+	ret = net_icmp_init_ctx(&ctx, family,
 				family == AF_INET6 ? NET_ICMPV6_ECHO_REPLY :
 						     NET_ICMPV4_ECHO_REPLY,
 				0, icmp_handler);
@@ -1267,7 +1267,7 @@ static void test_rx_chksum_icmp_frag_bad(sa_family_t family, bool offloaded)
 
 	test_icmp_init(family, offloaded, &dst_addr, &iface);
 
-	ret = net_icmp_init_ctx(&ctx,
+	ret = net_icmp_init_ctx(&ctx, family,
 				family == AF_INET6 ? NET_ICMPV6_ECHO_REPLY :
 						     NET_ICMPV4_ECHO_REPLY,
 				0, icmp_handler);

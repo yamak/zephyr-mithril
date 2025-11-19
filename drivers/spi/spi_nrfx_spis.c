@@ -20,26 +20,26 @@ LOG_MODULE_REGISTER(spi_nrfx_spis, CONFIG_SPI_LOG_LEVEL);
 
 #include "spi_context.h"
 
-#ifdef CONFIG_SOC_NRF54H20_GPD
-#include <nrf/gpd.h>
-#endif
-
-#define SPIS_IS_FAST(idx) IS_EQ(idx, 120)
-
-#define NRFX_SPIS_IS_FAST(unused, prefix, id, _) SPIS_IS_FAST(prefix##id)
-
-#if NRFX_FOREACH_ENABLED(SPIS, NRFX_SPIS_IS_FAST, (+), (0), _)
-/* If fast instances are used then system managed device PM cannot be used because
- * it may call PM actions from locked context and fast SPIM PM actions can only be
- * called from a thread context.
+/*
+ * Current factors requiring use of DT_NODELABEL:
+ *
+ * - HAL design (requirement of drv_inst_idx in nrfx_spis_t)
+ * - Name-based HAL IRQ handlers, e.g. nrfx_spis_0_irq_handler
  */
-BUILD_ASSERT(!IS_ENABLED(CONFIG_PM_DEVICE_SYSTEM_MANAGED));
-#endif
+#define SPIS_NODE(idx) \
+	COND_CODE_1(DT_NODE_EXISTS(DT_NODELABEL(spis##idx)), (spis##idx), (spi##idx))
+#define SPIS(idx) DT_NODELABEL(SPIS_NODE(idx))
+#define SPIS_PROP(idx, prop) DT_PROP(SPIS(idx), prop)
+#define SPIS_HAS_PROP(idx, prop) DT_NODE_HAS_PROP(SPIS(idx), prop)
 
 struct spi_nrfx_data {
 	struct spi_context ctx;
 	const struct device *dev;
+#ifdef CONFIG_MULTITHREADING
 	struct k_sem wake_sem;
+#else
+	atomic_t woken_up;
+#endif
 	struct gpio_callback wake_cb_data;
 };
 
@@ -48,9 +48,6 @@ struct spi_nrfx_config {
 	nrfx_spis_config_t config;
 	void (*irq_connect)(void);
 	uint16_t max_buf_len;
-#ifdef CONFIG_SOC_NRF54H20_GPD
-	bool gpd_ctrl;
-#endif
 	const struct pinctrl_dev_config *pcfg;
 	struct gpio_dt_spec wake_gpio;
 	void *mem_reg;
@@ -177,9 +174,9 @@ static int prepare_for_transfer(const struct device *dev,
 	return 0;
 
 buffers_set_failed:
-	dmm_buffer_in_release(dev_config->mem_reg, rx_buf, rx_buf_len, rx_buf);
+	dmm_buffer_in_release(dev_config->mem_reg, rx_buf, rx_buf_len, dmm_rx_buf);
 in_alloc_failed:
-	dmm_buffer_out_release(dev_config->mem_reg, (void *)tx_buf);
+	dmm_buffer_out_release(dev_config->mem_reg, (void *)dmm_tx_buf);
 out_alloc_failed:
 	return err;
 }
@@ -193,7 +190,11 @@ static void wake_callback(const struct device *dev, struct gpio_callback *cb,
 
 	(void)gpio_pin_interrupt_configure_dt(&dev_config->wake_gpio,
 					      GPIO_INT_DISABLE);
+#ifdef CONFIG_MULTITHREADING
 	k_sem_give(&dev_data->wake_sem);
+#else
+	atomic_set(&dev_data->woken_up, 1);
+#endif /* CONFIG_MULTITHREADING */
 }
 
 static void wait_for_wake(struct spi_nrfx_data *dev_data,
@@ -206,7 +207,19 @@ static void wait_for_wake(struct spi_nrfx_data *dev_data,
 			     dev_config->wake_gpio.pin) == 0) {
 		(void)gpio_pin_interrupt_configure_dt(&dev_config->wake_gpio,
 						      GPIO_INT_LEVEL_HIGH);
+#ifdef CONFIG_MULTITHREADING
 		(void)k_sem_take(&dev_data->wake_sem, K_FOREVER);
+#else
+		unsigned int key = irq_lock();
+
+		while (!atomic_get(&dev_data->woken_up)) {
+			k_cpu_atomic_idle(key);
+			key = irq_lock();
+		}
+
+		dev_data->woken_up = 0;
+		irq_unlock(key);
+#endif /* CONFIG_MULTITHREADING */
 	}
 }
 
@@ -359,12 +372,6 @@ static void spi_nrfx_suspend(const struct device *dev)
 		nrf_spis_disable(dev_config->spis.p_reg);
 	}
 
-#ifdef CONFIG_SOC_NRF54H20_GPD
-	if (dev_config->gpd_ctrl) {
-		nrf_gpd_retain_pins_set(dev_config->pcfg, true);
-	}
-#endif
-
 	(void)pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_SLEEP);
 }
 
@@ -373,12 +380,6 @@ static void spi_nrfx_resume(const struct device *dev)
 	const struct spi_nrfx_config *dev_config = dev->config;
 
 	(void)pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_DEFAULT);
-
-#ifdef CONFIG_SOC_NRF54H20_GPD
-	if (dev_config->gpd_ctrl) {
-		nrf_gpd_retain_pins_set(dev_config->pcfg, false);
-	}
-#endif
 
 	if (dev_config->wake_gpio.port == NULL) {
 		nrf_spis_enable(dev_config->spis.p_reg);
@@ -462,31 +463,22 @@ static int spi_nrfx_init(const struct device *dev)
 	return pm_device_driver_init(dev, spi_nrfx_pm_action);
 }
 
-/*
- * Current factors requiring use of DT_NODELABEL:
- *
- * - HAL design (requirement of drv_inst_idx in nrfx_spis_t)
- * - Name-based HAL IRQ handlers, e.g. nrfx_spis_0_irq_handler
- */
-
-#define SPIS_NODE(idx) COND_CODE_1(SPIS_IS_FAST(idx), (spis##idx), (spi##idx))
-
-#define SPIS(idx) DT_NODELABEL(SPIS_NODE(idx))
-
-#define SPIS_PROP(idx, prop) DT_PROP(SPIS(idx), prop)
-
 #define SPI_NRFX_SPIS_DEFINE(idx)					       \
+	NRF_DT_CHECK_NODE_HAS_REQUIRED_MEMORY_REGIONS(SPIS(idx));	       \
 	static void irq_connect##idx(void)				       \
 	{								       \
 		IRQ_CONNECT(DT_IRQN(SPIS(idx)), DT_IRQ(SPIS(idx), priority),   \
 			    nrfx_isr, nrfx_spis_##idx##_irq_handler, 0);       \
 	}								       \
 	static struct spi_nrfx_data spi_##idx##_data = {		       \
-		SPI_CONTEXT_INIT_LOCK(spi_##idx##_data, ctx),		       \
-		SPI_CONTEXT_INIT_SYNC(spi_##idx##_data, ctx),		       \
+		IF_ENABLED(CONFIG_MULTITHREADING,			       \
+			(SPI_CONTEXT_INIT_LOCK(spi_##idx##_data, ctx),))       \
+		IF_ENABLED(CONFIG_MULTITHREADING,			       \
+			(SPI_CONTEXT_INIT_SYNC(spi_##idx##_data, ctx),))       \
 		.dev  = DEVICE_DT_GET(SPIS(idx)),			       \
-		.wake_sem = Z_SEM_INITIALIZER(				       \
-			spi_##idx##_data.wake_sem, 0, 1),		       \
+		IF_ENABLED(CONFIG_MULTITHREADING,			       \
+			(.wake_sem = Z_SEM_INITIALIZER(			       \
+				spi_##idx##_data.wake_sem, 0, 1),))	       \
 	};								       \
 	PINCTRL_DT_DEFINE(SPIS(idx));					       \
 	static const struct spi_nrfx_config spi_##idx##z_config = {	       \
@@ -505,17 +497,13 @@ static int spi_nrfx_init(const struct device *dev)
 		.irq_connect = irq_connect##idx,			       \
 		.pcfg = PINCTRL_DT_DEV_CONFIG_GET(SPIS(idx)),		       \
 		.max_buf_len = BIT_MASK(SPIS_PROP(idx, easydma_maxcnt_bits)),  \
-		IF_ENABLED(CONFIG_SOC_NRF54H20_GPD,			       \
-			(.gpd_ctrl = NRF_PERIPH_GET_FREQUENCY(SPIS(idx)) >     \
-				NRFX_MHZ_TO_HZ(16UL),))			       \
 		.wake_gpio = GPIO_DT_SPEC_GET_OR(SPIS(idx), wake_gpios, {0}),  \
 		.mem_reg = DMM_DEV_TO_REG(SPIS(idx)),			       \
 	};								       \
 	BUILD_ASSERT(!DT_NODE_HAS_PROP(SPIS(idx), wake_gpios) ||	       \
 		     !(DT_GPIO_FLAGS(SPIS(idx), wake_gpios) & GPIO_ACTIVE_LOW),\
 		     "WAKE line must be configured as active high");	       \
-	PM_DEVICE_DT_DEFINE(SPIS(idx), spi_nrfx_pm_action,		       \
-		COND_CODE_1(SPIS_IS_FAST(idx), (0), (PM_DEVICE_ISR_SAFE)));    \
+	PM_DEVICE_DT_DEFINE(SPIS(idx), spi_nrfx_pm_action, PM_DEVICE_ISR_SAFE);\
 	SPI_DEVICE_DT_DEFINE(SPIS(idx),					       \
 			    spi_nrfx_init,				       \
 			    PM_DEVICE_DT_GET(SPIS(idx)),		       \

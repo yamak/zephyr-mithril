@@ -7,6 +7,9 @@
 
 #define DT_DRV_COMPAT nxp_lpuart
 
+#define LPUART_ASYNC_ENABLE \
+	IS_ENABLED(CONFIG_UART_ASYNC_API) && IS_ENABLED(CONFIG_UART_NXP_LPUART_ASYNC_API_SUPPORT)
+
 #include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
@@ -15,7 +18,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/pm/policy.h>
 #include <zephyr/drivers/pinctrl.h>
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 #include <zephyr/drivers/dma.h>
 #endif
 #include <zephyr/logging/log.h>
@@ -40,7 +43,7 @@ LOG_MODULE_REGISTER(uart_mcux_lpuart, LOG_LEVEL_ERR);
 #define LPUART_HAS_MCR 1
 #endif
 
-#if defined(CONFIG_UART_ASYNC_API) && defined(CONFIG_UART_INTERRUPT_DRIVEN)
+#if LPUART_ASYNC_ENABLE && defined(CONFIG_UART_INTERRUPT_DRIVEN)
 /* there are already going to be build errors, but at least this message will
  * be the first error from this driver making the reason clear
  */
@@ -48,13 +51,13 @@ BUILD_ASSERT(IS_ENABLED(CONFIG_UART_EXCLUSIVE_API_CALLBACKS), ""
 		"LPUART must use exclusive api callbacks");
 #endif
 
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 struct lpuart_dma_config {
 	const struct device *dma_dev;
 	const uint32_t dma_channel;
 	struct dma_config dma_cfg;
 };
-#endif /* CONFIG_UART_ASYNC_API */
+#endif /* LPUART_ASYNC_ENABLE */
 
 struct mcux_lpuart_config {
 	LPUART_Type *base;
@@ -72,13 +75,13 @@ struct mcux_lpuart_config {
 #ifdef CONFIG_UART_MCUX_LPUART_ISR_SUPPORT
 	void (*irq_config_func)(const struct device *dev);
 #endif
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 	const struct lpuart_dma_config rx_dma_config;
 	const struct lpuart_dma_config tx_dma_config;
-#endif /* CONFIG_UART_ASYNC_API */
+#endif /* LPUART_ASYNC_ENABLE */
 };
 
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 struct mcux_lpuart_rx_dma_params {
 	struct dma_block_config active_dma_block;
 	uint8_t *buf;
@@ -126,7 +129,7 @@ struct mcux_lpuart_data {
 	bool tx_poll_stream_on;
 	bool tx_int_stream_on;
 #endif /* CONFIG_PM */
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 	struct mcux_lpuart_async_data async;
 #endif
 	struct uart_config uart_config;
@@ -423,7 +426,7 @@ static void mcux_lpuart_irq_callback_set(const struct device *dev,
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
 
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 static inline void async_timer_start(struct k_work_delayable *work, size_t timeout_us)
 {
 	if ((timeout_us != SYS_FOREVER_US) && (timeout_us != 0)) {
@@ -906,7 +909,7 @@ static void mcux_lpuart_async_tx_timeout(struct k_work *work)
 	(void)mcux_lpuart_tx_abort(dev);
 }
 
-#endif /* CONFIG_UART_ASYNC_API */
+#endif /* LPUART_ASYNC_ENABLE */
 
 #if CONFIG_UART_MCUX_LPUART_ISR_SUPPORT
 
@@ -925,7 +928,7 @@ static inline void mcux_lpuart_irq_driven_isr(const struct device *dev,
 }
 #endif
 
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 static inline void mcux_lpuart_async_isr(struct mcux_lpuart_data *data,
 					      const struct mcux_lpuart_config *config,
 					      const uint32_t status) {
@@ -960,7 +963,7 @@ static void mcux_lpuart_isr(const struct device *dev)
 	}
 #endif /* CONFIG_PM */
 
-#if defined(CONFIG_UART_ASYNC_API) && defined(CONFIG_UART_INTERRUPT_DRIVEN)
+#if LPUART_ASYNC_ENABLE && defined(CONFIG_UART_INTERRUPT_DRIVEN)
 	if (data->api_type == LPUART_IRQ_DRIVEN) {
 		mcux_lpuart_irq_driven_isr(dev, data, config, status);
 	} else if (data->api_type == LPUART_ASYNC) {
@@ -968,15 +971,37 @@ static void mcux_lpuart_isr(const struct device *dev)
 	}
 #elif defined(CONFIG_UART_INTERRUPT_DRIVEN)
 	mcux_lpuart_irq_driven_isr(dev, data, config, status);
-#elif defined(CONFIG_UART_ASYNC_API)
+#elif LPUART_ASYNC_ENABLE
 	mcux_lpuart_async_isr(data, config, status);
 #endif /* API */
 }
 #endif /* CONFIG_UART_MCUX_LPUART_ISR_SUPPORT */
 
-#if LPUART_HAS_MODEM
-static int mcux_lpuart_config_flowctrl(uint8_t flow_ctrl, lpuart_config_t *uart_config)
+static int mcux_lpuart_config_pinctrl(const struct device *dev, uint8_t flow_ctrl)
 {
+	const struct mcux_lpuart_config *config = dev->config;
+	int err;
+
+	if (flow_ctrl) {
+		err = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_FLOWCONTROL);
+		if (err < 0) {
+			LOG_WRN("Failed to set flowcontrol state, using default state");
+			/* Fallback to default state if flow-control pins are not set */
+			err = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
+		}
+	} else {
+		err = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
+	}
+
+	return err;
+}
+
+#if LPUART_HAS_MODEM
+static int mcux_lpuart_config_flowctrl(const struct device *dev, uint8_t flow_ctrl,
+				       lpuart_config_t *uart_config)
+{
+	int ret = 0;
+
 	switch (flow_ctrl) {
 	case UART_CFG_FLOW_CTRL_NONE:
 	case UART_CFG_FLOW_CTRL_RS485:
@@ -990,13 +1015,20 @@ static int mcux_lpuart_config_flowctrl(uint8_t flow_ctrl, lpuart_config_t *uart_
 		break;
 
 	default:
-		return -ENOTSUP;
+		ret = -ENOTSUP;
+		break;
 	}
 
-	return 0;
+	if (ret == 0) {
+		/* Configure the pinctrl for flow control */
+		ret = mcux_lpuart_config_pinctrl(dev, flow_ctrl);
+	}
+
+	return ret;
 }
 #else
-static int mcux_lpuart_config_flowctrl(uint8_t flow_ctrl, lpuart_config_t *uart_config)
+static int mcux_lpuart_config_flowctrl(const struct device *dev, uint8_t flow_ctrl,
+				       lpuart_config_t *uart_config)
 {
 	if (flow_ctrl != UART_CFG_FLOW_CTRL_NONE) {
 		return -ENOTSUP;
@@ -1059,7 +1091,7 @@ static int mcux_lpuart_configure_basic(const struct device *dev, const struct ua
 		return -ENOTSUP;
 	}
 
-	ret = mcux_lpuart_config_flowctrl(cfg->flow_ctrl, uart_config);
+	ret = mcux_lpuart_config_flowctrl(dev, cfg->flow_ctrl, uart_config);
 	if (ret) {
 		return ret;
 	}
@@ -1072,7 +1104,7 @@ static int mcux_lpuart_configure_basic(const struct device *dev, const struct ua
 	return 0;
 }
 
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 static int mcux_lpuart_configure_async(const struct device *dev)
 {
 	const struct mcux_lpuart_config *config = dev->config;
@@ -1220,6 +1252,7 @@ static int mcux_lpuart_configure(const struct device *dev,
 static void mcux_lpuart_line_ctrl_set_rts(const struct device *dev, uint32_t val)
 {
 	const struct mcux_lpuart_config *config = dev->config;
+	uint32_t old_ctrl = config->base->CTRL;
 
 	/* Disable Transmitter and Receiver */
 	config->base->CTRL &= ~(LPUART_CTRL_TE_MASK | LPUART_CTRL_RE_MASK);
@@ -1233,6 +1266,9 @@ static void mcux_lpuart_line_ctrl_set_rts(const struct device *dev, uint32_t val
 		config->base->MODIR &= ~(LPUART_MODIR_RXRTSE_MASK);
 		config->base->MODIR |= (LPUART_MODIR_TXRTSPOL_MASK | LPUART_MODIR_TXRTSE_MASK);
 	}
+
+	/* Restore Transmitter and Receiver */
+	config->base->CTRL = old_ctrl;
 }
 #else
 #define mcux_lpuart_line_ctrl_set_rts(dev, val) ret = -ENOTSUP
@@ -1322,16 +1358,7 @@ static int mcux_lpuart_init(const struct device *dev)
 
 	/* set initial configuration */
 	mcux_lpuart_configure_init(dev, uart_api_config);
-	if (config->flow_ctrl) {
-		const struct pinctrl_state *state;
-
-		err = pinctrl_lookup_state(config->pincfg, PINCTRL_STATE_FLOWCONTROL, &state);
-		if (err < 0) {
-			err = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
-		}
-	} else {
-		err = pinctrl_apply_state(config->pincfg, PINCTRL_STATE_DEFAULT);
-	}
+	err = mcux_lpuart_config_pinctrl(dev, config->flow_ctrl);
 	if (err < 0) {
 		return err;
 	}
@@ -1377,14 +1404,14 @@ static DEVICE_API(uart, mcux_lpuart_driver_api) = {
 	.irq_update = mcux_lpuart_irq_update,
 	.irq_callback_set = mcux_lpuart_irq_callback_set,
 #endif
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 	.callback_set = mcux_lpuart_callback_set,
 	.tx = mcux_lpuart_tx,
 	.tx_abort = mcux_lpuart_tx_abort,
 	.rx_enable = mcux_lpuart_rx_enable,
 	.rx_buf_rsp = mcux_lpuart_rx_buf_rsp,
 	.rx_disable = mcux_lpuart_rx_disable,
-#endif /* CONFIG_UART_ASYNC_API */
+#endif /* LPUART_ASYNC_ENABLE */
 #ifdef CONFIG_UART_LINE_CTRL
 	.line_ctrl_set = mcux_lpuart_line_ctrl_set,
 	.line_ctrl_get = mcux_lpuart_line_ctrl_get,
@@ -1427,7 +1454,7 @@ static DEVICE_API(uart, mcux_lpuart_driver_api) = {
 #define MCUX_LPUART_IRQ_DEFINE(n)
 #endif /* CONFIG_UART_MCUX_LPUART_ISR_SUPPORT */
 
-#ifdef CONFIG_UART_ASYNC_API
+#if LPUART_ASYNC_ENABLE
 #define TX_DMA_CONFIG(id)								       \
 	.tx_dma_config = {								       \
 		.dma_dev =								       \
@@ -1478,7 +1505,7 @@ static DEVICE_API(uart, mcux_lpuart_driver_api) = {
 #else
 #define RX_DMA_CONFIG(n)
 #define TX_DMA_CONFIG(n)
-#endif /* CONFIG_UART_ASYNC_API */
+#endif /* LPUART_ASYNC_ENABLE */
 
 #define FLOW_CONTROL(n) \
 	DT_INST_PROP(n, hw_flow_control)   \

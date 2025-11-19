@@ -108,7 +108,7 @@ static struct gptp_hdr *check_gptp_msg(struct net_if *iface,
 				       bool is_tx)
 {
 	uint8_t *msg_start = net_pkt_data(pkt);
-	struct gptp_hdr *gptp_hdr;
+	struct gptp_hdr *ghdr;
 	int eth_hlen;
 	struct net_eth_hdr *hdr;
 
@@ -129,12 +129,12 @@ static struct gptp_hdr *check_gptp_msg(struct net_if *iface,
 			return false;
 		}
 
-		gptp_hdr = (struct gptp_hdr *)pkt->frags->frags->data;
+		ghdr = (struct gptp_hdr *)pkt->frags->frags->data;
 	} else {
-		gptp_hdr = (struct gptp_hdr *)(pkt->frags->data + eth_hlen);
+		ghdr = (struct gptp_hdr *)(pkt->frags->data + eth_hlen);
 	}
 
-	return gptp_hdr;
+	return ghdr;
 }
 
 static void update_pkt_priority(struct gptp_hdr *hdr, struct net_pkt *pkt)
@@ -307,7 +307,7 @@ static void create_rx_handler(struct eth_context *ctx)
 static void eth_iface_init(struct net_if *iface)
 {
 	struct eth_context *ctx = net_if_get_device(iface)->data;
-	struct net_linkaddr *ll_addr = eth_get_mac(ctx);
+	struct net_linkaddr *ll_addr;
 #if !defined(CONFIG_ETH_NATIVE_TAP_RANDOM_MAC)
 	const char *mac_addr =
 		mac_addr_cmd_opt ? mac_addr_cmd_opt : CONFIG_ETH_NATIVE_TAP_MAC_ADDR;
@@ -355,6 +355,8 @@ static void eth_iface_init(struct net_if *iface)
 	}
 #endif
 
+	ll_addr = eth_get_mac(ctx);
+
 	/* If we have only one network interface, then use the name
 	 * defined in the Kconfig directly. This way there is no need to
 	 * change the documentation etc. and break things.
@@ -398,7 +400,7 @@ static void eth_iface_init(struct net_if *iface)
 	}
 #endif
 
-	ctx->dev_fd = eth_iface_create(CONFIG_ETH_NATIVE_POSIX_DEV_NAME, ctx->if_name, false);
+	ctx->dev_fd = eth_iface_create(CONFIG_ETH_NATIVE_TAP_DEV_NAME, ctx->if_name, false);
 	if (ctx->dev_fd < 0) {
 		LOG_ERR("Cannot create %s (%d/%s)", ctx->if_name, ctx->dev_fd,
 			strerror(-ctx->dev_fd));

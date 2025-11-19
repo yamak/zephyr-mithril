@@ -263,7 +263,7 @@ This board supports 3 debug host tools. Please install your preferred host
 tool, then follow the instructions in `Configuring a Debug Probe`_ to
 configure the board appropriately.
 
-* :ref:`jlink-debug-host-tools` (Default, Supported by NXP)
+* :ref:`jlink-debug-host-tools` (Supported by NXP)
 * :ref:`linkserver-debug-host-tools` (Supported by NXP)
 * :ref:`pyocd-debug-host-tools` (Not supported by NXP)
 
@@ -275,15 +275,15 @@ Configuring a Debug Probe
 =========================
 
 .. note::
-	When the device transitions into low power states, the debugger may be
-	unable to access the chip. Use caution when enabling ``CONFIG_PM``, and
-	if the debugger cannot flash the part, see :ref:`Troubleshooting RT1064`
+	* To boot from the QSPI flash, make sure SW7 is set to 0010 and SW5 is set to 0000.
+	* When the device transitions into low power states, the debugger may be
+	  unable to access the chip. Use caution when enabling ``CONFIG_PM``, and
+	  if the debugger cannot flash the part, see :ref:`Troubleshooting RT1064`
 
 For the RT1064, J47/J48 are the SWD isolation jumpers, J42 is the DFU
 mode jumper, and J21 is the 20 pin JTAG/SWD header.
 
-.. include:: ../../common/rt1xxx-lpclink2-debug.rst
-   :start-after: rt1xxx-lpclink2-probes
+.. include:: ../../common/rt1xxx-lpclink2-debug.rst.inc
 
 See `Using J-Link with MIMXRT1060-EVK or MIMXRT1064-EVK`_ for more
 details.
@@ -386,8 +386,7 @@ If the west flash or debug commands fail, and the command hangs while executing
 runners.jlink, confirm the J-Link debug probe is configured, powered, and
 connected to the EVK properly.
 
-.. include:: ../../common/board-footer.rst
-   :start-after: nxp-board-footer
+.. include:: ../../common/board-footer.rst.inc
 
 .. _MIMXRT1064-EVK Website:
    https://www.nxp.com/support/developer-resources/run-time-software/i.mx-developer-resources/mimxrt1064-evk-i.mx-rt1064-evaluation-kit:MIMXRT1064-EVK
@@ -396,7 +395,7 @@ connected to the EVK properly.
    https://www.nxp.com/webapp/Download?colCode=IMXRT1064QSG
 
 .. _MIMXRT1064-EVK User Guide:
-   https://www.nxp.com/docs/en/data-sheet/MIMXRT10601064EKBHUG.pdf
+   https://www.nxp.com/webapp/Download?colCode=MIMXRT10601064EKBHUG
 
 .. _MIMXRT1064-EVK Debug Firmware:
    https://www.nxp.com/docs/en/application-note/AN13206.pdf

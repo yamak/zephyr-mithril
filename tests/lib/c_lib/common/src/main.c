@@ -156,19 +156,6 @@ ZTEST(libc_common, test_stdint)
 #endif
 }
 
-/**
- * @brief Test time_t to make sure it is at least 64 bits
- *
- */
-ZTEST(libc_common, test_time_t)
-{
-#ifdef CONFIG_EXTERNAL_LIBC
-	ztest_test_skip();
-#else
-	zassert_true(sizeof(time_t) >= sizeof(uint64_t));
-#endif
-}
-
 /*
  * variables used during string library testing
  */
@@ -256,7 +243,7 @@ ZTEST(libc_common, test_strncmp)
 	/* test compare the same strings */
 	buffer[BUFSIZE - 1] = '\0';
 	zassert_true((strncmp(buffer, buffer, BUFSIZE) == 0),
-				 "strncmp 10 with \0");
+				 "strncmp 10 with \\0");
 }
 
 
@@ -538,7 +525,7 @@ ZTEST(libc_common, test_memchr)
 
 	/* verify the character inside the count scope */
 	zassert_not_null(memchr(str, 'e', strlen(str)), "memchr serach e");
-	zassert_not_null(memchr(str, '\0', strlen(str)+1), "memchr serach \0");
+	zassert_not_null(memchr(str, '\0', strlen(str)+1), "memchr serach \\0");
 
 	/* verify when the count parm is zero */
 	zassert_is_null(memchr(str, 't', 0), "memchr count 0 error");
@@ -658,7 +645,7 @@ ZTEST(libc_common, test_str_operate)
 	zassert_is_null(strstr(str1, "ayz"), "strstr aabbccd with ayz failed");
 	zassert_not_null(strstr(str1, str2), "strstr aabbccd with b succeed");
 	zassert_not_null(strstr(str1, "bb"), "strstr aabbccd with bb succeed");
-	zassert_not_null(strstr(str1, ""), "strstr aabbccd with \0 failed");
+	zassert_not_null(strstr(str1, ""), "strstr aabbccd with \\0 failed");
 }
 
 /**
@@ -909,7 +896,7 @@ void test_strtoll(void)
 	ret = strtoll(border4, NULL, 10);
 	zassert_equal(ret, LLONG_MAX, "strtoll base = 10 failed");
 	ret = strtoull(border5, NULL, 16);
-	zassert_equal(ret, 1, "strtoull base = 16 failed, %s != 0x%x", border5, ret);
+	zassert_equal(ret, 1, "strtoull base = 16 failed, %s != 0x%llx", border5, ret);
 	ret = strtoull(border6, NULL, 10);
 	zassert_equal(errno, ERANGE, "strtoull base = 10 failed, %s != %lld", border6, ret);
 	ret = strtoull(border7, NULL, 10);
@@ -987,7 +974,7 @@ void test_strtoull(void)
 	ret = strtoull(border3, NULL, 10);
 	zassert_equal(ret, ULLONG_MAX, "strtoull base = 10 failed");
 	ret = strtoull(border4, NULL, 16);
-	zassert_equal(ret, 1, "strtoull base = 16 failed, %s != 0x%x", border4, ret);
+	zassert_equal(ret, 1, "strtoull base = 16 failed, %s != 0x%llx", border4, ret);
 	ret = strtoull(border5, NULL, 10);
 	zassert_equal(errno, ERANGE, "strtoull base = 10 failed, %s != %lld", border5, ret);
 	ret = strtoull(border6, NULL, 10);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Vitrolife A/S
+ * Copyright (c) 2025 Prevas A/S
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -135,11 +135,11 @@ static int explorir_m_buffer_process(struct explorir_m_data *data, char type,
 		break;
 
 	case EXPLORIR_M_CO2_FILTERED_CHAR:
-		data->scaling = strtol(&data->read_buffer[EXPLORIR_M_VALUE_INDEX], NULL, 10);
+		data->filtered = strtol(&data->read_buffer[EXPLORIR_M_VALUE_INDEX], NULL, 10);
 		break;
 
 	case EXPLORIR_M_SCALING_CHAR:
-		data->filtered = strtol(&data->read_buffer[EXPLORIR_M_VALUE_INDEX], NULL, 10);
+		data->scaling = strtol(&data->read_buffer[EXPLORIR_M_VALUE_INDEX], NULL, 10);
 		break;
 
 	case EXPLORIR_M_GET_FILTER_CHAR:
@@ -262,7 +262,7 @@ static int explorir_m_calibrate(const struct device *dev, struct sensor_value *v
 	struct explorir_m_data *data = dev->data;
 	struct sensor_value original;
 	struct sensor_value tmp;
-	int restore_rc;
+	int restore_rc = 0;
 	int rc;
 
 	/* Prevent sensor interaction while using calibration filter value */
@@ -282,7 +282,7 @@ static int explorir_m_calibrate(const struct device *dev, struct sensor_value *v
 	rc = explorir_m_uart_transceive(dev, EXPLORIR_M_SET_FILTER_CHAR, &tmp,
 					EXPLORIR_M_SET_VAL_ONE);
 	if (rc == 0) {
-		tmp.val1 = val->val1 / data->filtered;
+		tmp.val1 = val->val1 / data->scaling;
 		rc = explorir_m_uart_transceive(dev, EXPLORIR_M_ZERO_POINT_KNOWN_CHAR, &tmp,
 						EXPLORIR_M_SET_VAL_ONE);
 	}
@@ -405,8 +405,17 @@ static int explorir_m_init(const struct device *dev)
 	uart_irq_rx_enable(cfg->uart_dev);
 
 	val.val1 = EXPLORIR_M_MODE_POLL;
-	explorir_m_uart_transceive(dev, EXPLORIR_M_MODE_CHAR, &val, EXPLORIR_M_SET_VAL_ONE);
-	explorir_m_uart_transceive(dev, EXPLORIR_M_SCALING_CHAR, NULL, EXPLORIR_M_SET_NONE);
+	rc = explorir_m_uart_transceive(dev, EXPLORIR_M_MODE_CHAR, &val, EXPLORIR_M_SET_VAL_ONE);
+	if (rc != 0) {
+		LOG_ERR("Set mode failed: %d", rc);
+		return rc;
+	}
+
+	rc = explorir_m_uart_transceive(dev, EXPLORIR_M_SCALING_CHAR, NULL, EXPLORIR_M_SET_NONE);
+	if (rc != 0) {
+		LOG_ERR("Set scaling failed: %d", rc);
+		return rc;
+	}
 
 	return rc;
 }

@@ -28,3 +28,11 @@
 #endif /* CONFIG_CPP_EXCEPTIONS */
 
 #endif /* CONFIG_CPP */
+
+#if !defined(CONFIG_CPP_EXCEPTIONS)
+	PROVIDE(__eh_frame_start = 0);
+	PROVIDE(__eh_frame_end = 0);
+	PROVIDE(__eh_frame_hdr_start = 0);
+	PROVIDE(__eh_frame_hdr_end = 0);
+	/DISCARD/ : { *(.eh_frame) }
+#endif

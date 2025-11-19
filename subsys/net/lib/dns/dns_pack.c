@@ -166,6 +166,18 @@ int dns_unpack_answer(struct dns_msg_t *dns_msg, int dname_ptr, uint32_t *ttl,
 		set_dns_msg_response(dns_msg, DNS_RESPONSE_IP, pos, len);
 		return 0;
 
+	case DNS_RR_TYPE_PTR:
+		set_dns_msg_response(dns_msg, DNS_RESPONSE_DATA, pos, len);
+		return 0;
+
+	case DNS_RR_TYPE_TXT:
+		set_dns_msg_response(dns_msg, DNS_RESPONSE_TXT, pos, len);
+		return 0;
+
+	case DNS_RR_TYPE_SRV:
+		set_dns_msg_response(dns_msg, DNS_RESPONSE_SRV, pos, len);
+		return 0;
+
 	case DNS_RR_TYPE_CNAME:
 		set_dns_msg_response(dns_msg, DNS_RESPONSE_CNAME_NO_IP,
 				     pos, len);
@@ -183,8 +195,6 @@ int dns_unpack_response_header(struct dns_msg_t *msg, int src_id)
 {
 	uint8_t *dns_header;
 	uint16_t size;
-	int qdcount;
-	int ancount;
 	int rc;
 
 	dns_header = msg->msg;
@@ -217,16 +227,6 @@ int dns_unpack_response_header(struct dns_msg_t *msg, int src_id)
 	default:
 		return rc;
 
-	}
-
-	qdcount = dns_unpack_header_qdcount(dns_header);
-	ancount = dns_unpack_header_ancount(dns_header);
-
-	/* For mDNS (when src_id == 0) the query count is 0 so accept
-	 * the packet in that case.
-	 */
-	if ((qdcount < 1 && src_id > 0) || ancount < 1) {
-		return -EINVAL;
 	}
 
 	return 0;
@@ -346,7 +346,8 @@ int dns_unpack_response_query(struct dns_msg_t *dns_msg)
 
 	buf = dns_query + qname_size;
 	if (dns_unpack_query_qtype(buf) != DNS_RR_TYPE_A &&
-	    dns_unpack_query_qtype(buf) != DNS_RR_TYPE_AAAA) {
+	    dns_unpack_query_qtype(buf) != DNS_RR_TYPE_AAAA &&
+	    dns_unpack_query_qtype(buf) != DNS_RR_TYPE_PTR) {
 		return -EINVAL;
 	}
 
@@ -462,10 +463,6 @@ int mdns_unpack_query_header(struct dns_msg_t *msg, uint16_t *src_id)
 		return -EINVAL;
 	}
 
-	if (dns_header_opcode(dns_header) != 0) {
-		return -EINVAL;
-	}
-
 	if (dns_header_rcode(dns_header) != 0) {
 		return -EINVAL;
 	}
@@ -486,8 +483,8 @@ int mdns_unpack_query_header(struct dns_msg_t *msg, uint16_t *src_id)
 }
 
 /* Returns the length of the unpacked name */
-static int dns_unpack_name(const uint8_t *msg, int maxlen, const uint8_t *src,
-			   struct net_buf *buf, const uint8_t **eol)
+int dns_unpack_name(const uint8_t *msg, int maxlen, const uint8_t *src,
+		    struct net_buf *buf, const uint8_t **eol)
 {
 	int dest_size = net_buf_tailroom(buf);
 	const uint8_t *end_of_label = NULL;
@@ -544,7 +541,10 @@ static int dns_unpack_name(const uint8_t *msg, int maxlen, const uint8_t *src,
 
 			loop_check += label_len + 1;
 
-			net_buf_add_u8(buf, '.');
+			/* separate labels by periods */
+			if (buf->len > 0) {
+				net_buf_add_u8(buf, '.');
+			}
 			net_buf_add_mem(buf, curr_src, label_len);
 
 			curr_src += label_len;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Vitrolife A/S
+ * Copyright (c) 2025 Prevas A/S
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -296,7 +296,7 @@ static DEVICE_API(dac, dac161s997_driver_api) = {
 
 #define DAC_DAC161S997_INIT(n)                                                                     \
 	static const struct dac161s997_config dac161s997_config_##n = {                            \
-		.bus = SPI_DT_SPEC_INST_GET(n, SPI_TRANSFER_MSB | SPI_WORD_SET(8), 0),             \
+		.bus = SPI_DT_SPEC_INST_GET(n, SPI_TRANSFER_MSB | SPI_WORD_SET(8)),                \
 		.gpio_errb = GPIO_DT_SPEC_INST_GET_OR(n, errb_gpios, {0}),                         \
 	};                                                                                         \
                                                                                                    \

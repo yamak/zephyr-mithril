@@ -13,7 +13,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/spinlock.h>
 
-#include <zephyr/drivers/timer/ti_dmtimer.h>
+#include "ti_dmtimer.h"
 
 #define DT_DRV_COMPAT ti_am654_timer
 
@@ -157,7 +157,7 @@ static int sys_clock_driver_init(void)
 {
 	struct ti_dm_timer_data *data;
 
-	systick_timer_dev = DEVICE_DT_GET(DT_NODELABEL(systick_timer));
+	systick_timer_dev = DEVICE_DT_GET(DT_DRV_INST(0));
 
 	data = systick_timer_dev->data;
 

@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(adc_rts5912, CONFIG_ADC_LOG_LEVEL);
 
 #define RTS5912_ADC_MAX_CHAN        12
 #define RTS5912_ADC_POLLING_TIME_MS 1
+#define RTS5912_ADC_HW_INIT_TIME_MS 20
 #define RTS5912_ADC_ENABLE_TIMEOUT  100
 
 struct adc_rts5912_config {
@@ -123,6 +124,7 @@ static int adc_rts5912_enable(const struct device *dev)
 	int64_t st = k_uptime_get();
 
 	regs->ctrl |= ADC_CTRL_EN;
+	k_msleep(RTS5912_ADC_HW_INIT_TIME_MS);
 	while ((k_uptime_get() - st) < RTS5912_ADC_ENABLE_TIMEOUT) {
 		if (regs->sts & ADC_STS_RDY) {
 			return 0;
@@ -260,6 +262,7 @@ static int adc_rts5912_init(const struct device *dev)
 
 	regs->ctrl = ADC_CTRL_RST;
 
+	NVIC_ClearPendingIRQ(DT_INST_IRQN(0));
 	IRQ_CONNECT(DT_INST_IRQN(0), DT_INST_IRQ(0, priority), adc_rts5912_single_isr,
 		    DEVICE_DT_INST_GET(0), 0);
 	irq_enable(DT_INST_IRQN(0));

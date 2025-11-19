@@ -5,14 +5,23 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#include "btp/btp.h"
-#include "zephyr/sys/byteorder.h"
+#include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
-#include <../../subsys/bluetooth/audio/tbs_internal.h>
-
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/addr.h>
 #include <zephyr/bluetooth/audio/tbs.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/util.h>
+
+#include "../../subsys/bluetooth/audio/tbs_internal.h"
+#include "btp/btp.h"
 
 #define LOG_MODULE_NAME bttester_ccp
 LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_BTTESTER_LOG_LEVEL);
@@ -909,7 +918,8 @@ static uint8_t tbs_originate(const void *cmd, uint16_t cmd_len, void *rsp, uint1
 	uri[cp->uri_len] = '\0';
 
 	err = bt_tbs_originate(cp->index, uri, &call_index);
-	if (err) {
+	/* TODO should we extend BTP to return call ID? */
+	if (err < 0) {
 		return BTP_STATUS_FAILED;
 	}
 
@@ -1048,6 +1058,22 @@ static uint8_t tbs_set_signal_strength(const void *cmd, uint16_t cmd_len, void *
 	return BTP_STATUS_SUCCESS;
 }
 
+static uint8_t tbs_terminate_call(const void *cmd, uint16_t cmd_len, void *rsp,
+				  uint16_t *rsp_len)
+{
+	const struct btp_tbs_terminate_call_cmd *cp = cmd;
+	int err;
+
+	LOG_DBG("index=%u", cp->index);
+
+	err = bt_tbs_terminate(cp->index);
+	if (err != 0) {
+		return BTP_STATUS_FAILED;
+	}
+
+	return BTP_STATUS_SUCCESS;
+}
+
 static bool btp_tbs_originate_call_cb(struct bt_conn *conn, uint8_t call_index, const char *uri)
 {
 	LOG_DBG("TBS Originate Call cb");
@@ -1116,6 +1142,11 @@ static const struct btp_handler tbs_handlers[] = {
 		.opcode = BTP_TBS_SET_SIGNAL_STRENGTH,
 		.expect_len = sizeof(struct btp_tbs_set_signal_strength_cmd),
 		.func = tbs_set_signal_strength,
+	},
+	{
+		.opcode = BTP_TBS_TERMINATE_CALL,
+		.expect_len = sizeof(struct btp_tbs_terminate_call_cmd),
+		.func = tbs_terminate_call
 	},
 };
 

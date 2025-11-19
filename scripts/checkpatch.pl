@@ -394,6 +394,7 @@ our $Attribute	= qr{
 			__pure|
 			__noclone|
 			__deprecated|
+			__deprecated_version|
 			__read_mostly|
 			__ro_after_init|
 			__kprobes|
@@ -862,7 +863,7 @@ our $LvalOrFunc	= qr{((?:[\&\*]\s*)?$Lval)\s*($balanced_parens{0,1})\s*};
 our $FuncArg = qr{$Typecast{0,1}($LvalOrFunc|$Constant|$String)};
 
 our $declaration_macros = qr{(?x:
-	(?:$Storage\s+)?(?:[A-Z_][A-Z0-9]*_){0,2}(?:DEFINE|DECLARE)(?:_[A-Z0-9]+){1,6}\s*\(|
+	(?:$Storage\s+)?(?:[A-Z_][A-Z0-9]*_){0,2}(?:DEFINE|DECLARE)(?:_[A-Z0-9]+){0,6}\s*\(|
 	(?:$Storage\s+)?[HLP]?LIST_HEAD\s*\(|
 	(?:SKCIPHER_REQUEST|SHASH_DESC|AHASH_REQUEST)_ON_STACK\s*\(
 )};
@@ -2569,6 +2570,11 @@ sub process {
 			}
 		}
 		if ($skipme) {
+			next;
+		}
+
+		# skip package-lock.json and package.json files specifically
+		if ($realfile =~ /package(-lock)?\.json$/) {
 			next;
 		}
 
@@ -5560,7 +5566,42 @@ sub process {
 			$block =~ tr/\x1C//d;
 			#print sprintf '%v02X', $block;
 			#print "\n";
-			if ($level == 0 && $block !~ /^\s*\{/ && !$allowed) {
+
+			# Detect if the line is part of a macro
+			my $is_macro = 0;
+
+			# Check if the current line is a single-line macro
+			if ($lines[$linenr] =~ /^\+\s*#\s*define\b/) {
+				$is_macro = 1;
+			} else {
+				# Dynamically check upward for multi-line macro
+				my $i = $linenr - 1;
+				while ($i >= 0) {
+					my $line = $lines[$i];
+					last unless defined $line;
+
+					# Stop at non-added/context lines
+					last if $line !~ /^[ +]/;
+
+					# If this is a macro definition line, we're inside a macro
+					if ($line =~ /^\+\s*#\s*define\b/) {
+						$is_macro = 1;
+						last;
+					}
+
+					# Check if previous line ends with backslash (i.e., continuation)
+					if ($i > 0) {
+						my $prev_line = $lines[$i - 1];
+						last if !defined($prev_line) || $prev_line !~ /\\\s*$/;
+					} else {
+						last;
+					}
+
+					$i--;
+				}
+			}
+
+			if ($level == 0 && $block !~ /^\s*\{/ && !$allowed && !$is_macro) {
 				my $cnt = statement_rawlines($block);
 				my $herectx = get_stat_here($linenr, $cnt, $here);
 

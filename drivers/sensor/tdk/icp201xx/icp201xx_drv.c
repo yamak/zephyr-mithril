@@ -232,7 +232,7 @@ static int icp201xx_channel_get(const struct device *dev, enum sensor_channel ch
 		float pressure, temperature, altitude;
 
 		icp201xx_convert_pressure(&pressure_val, data->raw_pressure);
-		icp201xx_convert_temperature(&temp_val, data->raw_pressure);
+		icp201xx_convert_temperature(&temp_val, data->raw_temperature);
 		pressure = pressure_val.val1 + ((float)pressure_val.val2 / 1000000);
 		temperature = temp_val.val1 + ((float)temp_val.val2 / 1000000);
 		altitude = convertToHeight(pressure, temperature);
@@ -421,8 +421,7 @@ static DEVICE_API(sensor, icp201xx_api_funcs) = {.sample_fetch = icp201xx_sample
 		.bus.spi = SPI_DT_SPEC_INST_GET(inst,                      \
 			(SPI_OP_MODE_MASTER | SPI_WORD_SET(8) |    \
 			SPI_TRANSFER_MSB | SPI_FULL_DUPLEX |      \
-			SPI_MODE_CPHA | SPI_MODE_CPOL),           \
-			0),                                        \
+			SPI_MODE_CPHA | SPI_MODE_CPOL)), \
 		.bus_io = &icp201xx_bus_io_spi,                            \
 		ICP201XX_CONFIG(inst)                                          \
 	}

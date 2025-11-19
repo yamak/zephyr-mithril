@@ -127,15 +127,20 @@ static struct bt_sdp_attribute hfp_attrs[] = {
 	),
 	BT_SDP_LIST(
 		BT_SDP_ATTR_PROFILE_DESC_LIST,
-		BT_SDP_TYPE_SIZE_VAR(BT_SDP_SEQ8, 6),
+		BT_SDP_TYPE_SIZE_VAR(BT_SDP_SEQ8, 8),
 		BT_SDP_DATA_ELEM_LIST(
 		{
-			BT_SDP_TYPE_SIZE(BT_SDP_UUID16),
-			BT_SDP_ARRAY_16(BT_SDP_HANDSFREE_SVCLASS)
-		},
-		{
-			BT_SDP_TYPE_SIZE(BT_SDP_UINT16),
-			BT_SDP_ARRAY_16(0x0109)
+			BT_SDP_TYPE_SIZE_VAR(BT_SDP_SEQ8, 6),
+			BT_SDP_DATA_ELEM_LIST(
+			{
+				BT_SDP_TYPE_SIZE(BT_SDP_UUID16),
+				BT_SDP_ARRAY_16(BT_SDP_HANDSFREE_SVCLASS)
+			},
+			{
+				BT_SDP_TYPE_SIZE(BT_SDP_UINT16),
+				BT_SDP_ARRAY_16(0x0109)
+			},
+			)
 		},
 		)
 	),
@@ -504,6 +509,7 @@ static int clcc_finish(struct at_client *hf_at, enum at_result result,
 		clear_call_without_clcc(hf);
 	}
 
+	atomic_clear_bit(hf->flags, BT_HFP_HF_FLAG_USR_CLCC_CMD);
 	atomic_clear_bit(hf->flags, BT_HFP_HF_FLAG_CLCC_PENDING);
 
 	return 0;
@@ -524,7 +530,7 @@ static void clear_call_clcc_state(struct bt_hfp_hf *hf)
 	}
 }
 
-static void hf_query_current_calls(struct bt_hfp_hf *hf)
+static int hf_query_current_calls(struct bt_hfp_hf *hf)
 {
 	int err;
 
@@ -532,24 +538,28 @@ static void hf_query_current_calls(struct bt_hfp_hf *hf)
 
 	if (!hf) {
 		LOG_ERR("No HF connection found");
-		return;
+		return -EINVAL;
 	}
 
 	if (!atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_CONNECTED)) {
-		return;
+		return -ENOTCONN;
 	}
 
 	if (!(hf->ag_features & BT_HFP_AG_FEATURE_ECS)) {
-		return;
+		return -ENOTSUP;
 	}
 
 	if (!(hf->hf_features & BT_HFP_HF_FEATURE_ECS)) {
-		return;
+		return -ENOTSUP;
 	}
 
-	if (atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_CLCC_PENDING)) {
+	if (atomic_test_and_set_bit(hf->flags, BT_HFP_HF_FLAG_CLCC_PENDING)) {
 		k_work_reschedule(&hf->deferred_work, K_MSEC(HF_ENHANCED_CALL_STATUS_TIMEOUT));
-		return;
+		return 0;
+	}
+
+	if (atomic_test_and_clear_bit(hf->flags, BT_HFP_HF_FLAG_USR_CLCC_PND)) {
+		atomic_set_bit(hf->flags, BT_HFP_HF_FLAG_USR_CLCC_CMD);
 	}
 
 	clear_call_clcc_state(hf);
@@ -558,6 +568,8 @@ static void hf_query_current_calls(struct bt_hfp_hf *hf)
 	if (err < 0) {
 		LOG_ERR("Fail to query current calls on %p", hf);
 	}
+
+	return err;
 }
 
 static void hf_call_state_update(struct bt_hfp_hf_call *call, int state)
@@ -590,6 +602,41 @@ static void hf_call_state_update(struct bt_hfp_hf_call *call, int state)
 	case BT_HFP_HF_CALL_STATE_HELD:
 		break;
 	}
+}
+
+static int get_using_call_count(struct bt_hfp_hf *hf)
+{
+	struct bt_hfp_hf_call *call;
+	int count = 0;
+
+	ARRAY_FOR_EACH(hf->calls, i) {
+		call = &hf->calls[i];
+
+		if (atomic_test_bit(call->flags, BT_HFP_HF_CALL_IN_USING)) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
+static struct bt_hfp_hf_call *get_new_call(struct bt_hfp_hf *hf)
+{
+	struct bt_hfp_hf_call *call;
+
+	ARRAY_FOR_EACH(hf->calls, i) {
+		call = &hf->calls[i];
+
+		if (atomic_test_and_set_bit(call->flags, BT_HFP_HF_CALL_IN_USING)) {
+			continue;
+		}
+
+		call->hf = hf;
+
+		return call;
+	}
+
+	return NULL;
 }
 
 #if defined(CONFIG_BT_HFP_HF_ECS)
@@ -645,6 +692,89 @@ static void call_state_update(struct bt_hfp_hf_call *call, uint32_t status)
 	}
 }
 
+static void new_call_state_update(struct bt_hfp_hf_call *call, bool incoming, uint32_t status)
+{
+	switch (status) {
+	case BT_HFP_CLCC_STATUS_ACTIVE:
+	case BT_HFP_CLCC_STATUS_HELD:
+	case BT_HFP_CLCC_STATUS_DIALING:
+	case BT_HFP_CLCC_STATUS_ALERTING:
+	case BT_HFP_CLCC_STATUS_INCOMING:
+	case BT_HFP_CLCC_STATUS_WAITING:
+	case BT_HFP_CLCC_STATUS_CALL_HELD_HOLD:
+		if (incoming) {
+			if (bt_hf->incoming) {
+				bt_hf->incoming(call->hf, call);
+			}
+		} else {
+			if (bt_hf->outgoing) {
+				bt_hf->outgoing(call->hf, call);
+			}
+		}
+		break;
+	default:
+		LOG_WRN("Invalid call status %u", status);
+		free_call(call);
+		return;
+	}
+
+	switch (status) {
+	case BT_HFP_CLCC_STATUS_ACTIVE:
+		hf_call_state_update(call, BT_HFP_HF_CALL_STATE_ACTIVE);
+		if (bt_hf->accept) {
+			bt_hf->accept(call);
+		}
+		break;
+	case BT_HFP_CLCC_STATUS_HELD:
+		hf_call_state_update(call, BT_HFP_HF_CALL_STATE_HELD);
+		if (bt_hf->held) {
+			bt_hf->held(call);
+		}
+		break;
+	case BT_HFP_CLCC_STATUS_DIALING:
+		hf_call_state_update(call, BT_HFP_HF_CALL_STATE_OUTGOING);
+		if (bt_hf->dialing) {
+			bt_hf->dialing(call->hf, 0);
+		}
+		break;
+	case BT_HFP_CLCC_STATUS_ALERTING:
+		hf_call_state_update(call, BT_HFP_HF_CALL_STATE_ALERTING);
+		if (bt_hf->remote_ringing) {
+			bt_hf->remote_ringing(call);
+		}
+		break;
+	case BT_HFP_CLCC_STATUS_INCOMING:
+	case BT_HFP_CLCC_STATUS_WAITING:
+		hf_call_state_update(call, BT_HFP_HF_CALL_STATE_WAITING);
+		break;
+	case BT_HFP_CLCC_STATUS_CALL_HELD_HOLD:
+		atomic_set_bit(call->flags, BT_HFP_HF_CALL_INCOMING_HELD);
+		hf_call_state_update(call, BT_HFP_HF_CALL_STATE_ACTIVE);
+		if (bt_hf->incoming_held) {
+			bt_hf->incoming_held(call);
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+static void set_call_incoming_flag(struct bt_hfp_hf_call *call, bool incoming)
+{
+	int call_count;
+
+	call_count = get_using_call_count(call->hf);
+	if (call_count > 1) {
+		if (incoming) {
+			atomic_test_bit(call->flags, BT_HFP_HF_CALL_INCOMING_3WAY);
+		} else {
+			atomic_test_bit(call->flags, BT_HFP_HF_CALL_OUTGOING_3WAY);
+		}
+	} else {
+		atomic_set_bit_to(call->flags, BT_HFP_HF_CALL_INCOMING, incoming);
+	}
+}
+
 static int clcc_handle(struct at_client *hf_at)
 {
 	struct bt_hfp_hf *hf = CONTAINER_OF(hf_at, struct bt_hfp_hf, at);
@@ -658,6 +788,7 @@ static int clcc_handle(struct at_client *hf_at)
 	char *number = NULL;
 	uint32_t type = 0;
 	bool incoming = false;
+	bool new_call = false;
 
 	err = at_get_number(hf_at, &index);
 	if (err < 0) {
@@ -670,8 +801,12 @@ static int clcc_handle(struct at_client *hf_at)
 		LOG_INF("Valid call with index %d not found", index);
 		call = get_call_without_index(hf);
 		if (!call) {
-			LOG_INF("Not available call");
-			return 0;
+			call = get_new_call(hf);
+			if (!call) {
+				LOG_INF("Not available call");
+				return 0;
+			}
+			new_call = true;
 		}
 		call->index = (uint8_t)index;
 	}
@@ -682,16 +817,6 @@ static int clcc_handle(struct at_client *hf_at)
 	if (err < 0) {
 		LOG_ERR("Error getting dir");
 		return err;
-	}
-
-	if (atomic_test_bit(call->flags, BT_HFP_HF_CALL_INCOMING) ||
-		atomic_test_bit(call->flags, BT_HFP_HF_CALL_INCOMING_3WAY)) {
-		incoming = true;
-	}
-
-	if (incoming != !!dir) {
-		LOG_ERR("Call dir of HF is not aligned with AG");
-		return 0;
 	}
 
 	err = at_get_number(hf_at, &status);
@@ -714,14 +839,47 @@ static int clcc_handle(struct at_client *hf_at)
 
 	number = at_get_string(hf_at);
 
-	if (number) {
+	if (number != NULL) {
 		(void)at_get_number(hf_at, &type);
 	}
 
-	call_state_update(call, status);
+	if (atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_USR_CLCC_CMD) &&
+	    (bt_hf->query_call != NULL)) {
+		struct bt_hfp_hf_current_call current_call;
+
+		current_call.index = (uint8_t)index;
+		current_call.dir = (enum bt_hfp_hf_call_dir)dir;
+		current_call.status = (enum bt_hfp_hf_call_status)status;
+		current_call.mode = (enum bt_hfp_hf_call_mode)mode;
+		current_call.multiparty = mpty > 0 ? true : false;
+		current_call.number = number;
+		current_call.type = (uint8_t)type;
+
+		bt_hf->query_call(hf, &current_call);
+	}
 
 	LOG_DBG("CLCC idx %d dir %d status %d mode %d mpty %d number %s type %d",
 		index, dir, status, mode, mpty, number, type);
+
+	if (new_call) {
+		set_call_incoming_flag(call, dir == BT_HFP_CLCC_DIR_INCOMING);
+	}
+
+	if (atomic_test_bit(call->flags, BT_HFP_HF_CALL_INCOMING) ||
+	    atomic_test_bit(call->flags, BT_HFP_HF_CALL_INCOMING_3WAY)) {
+		incoming = true;
+	}
+
+	if (incoming != (dir == BT_HFP_CLCC_DIR_INCOMING)) {
+		LOG_ERR("Call dir of HF is not aligned with AG");
+		return 0;
+	}
+
+	if (new_call) {
+		new_call_state_update(call, incoming, status);
+	} else {
+		call_state_update(call, status);
+	}
 
 	return 0;
 }
@@ -918,45 +1076,12 @@ static void bt_hf_deferred_work(struct k_work *work)
 {
 	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
 	struct bt_hfp_hf *hf = CONTAINER_OF(dwork, struct bt_hfp_hf, deferred_work);
+	int err;
 
-	hf_query_current_calls(hf);
-}
-
-static struct bt_hfp_hf_call *get_new_call(struct bt_hfp_hf *hf)
-{
-	struct bt_hfp_hf_call *call;
-
-	for (size_t index = 0; index < ARRAY_SIZE(hf->calls); index++) {
-		call = &hf->calls[index];
-
-		if (atomic_test_and_set_bit(call->flags, BT_HFP_HF_CALL_IN_USING)) {
-			continue;
-		}
-
-		call->hf = hf;
-
-		return call;
+	err = hf_query_current_calls(hf);
+	if (err != 0) {
+		LOG_ERR("Failed to query current calls: %d", err);
 	}
-
-	return NULL;
-}
-
-static int get_using_call_count(struct bt_hfp_hf *hf)
-{
-	struct bt_hfp_hf_call *call;
-	int count = 0;
-
-	for (size_t index = 0; index < ARRAY_SIZE(hf->calls); index++) {
-		call = &hf->calls[index];
-
-		if (!atomic_test_bit(call->flags, BT_HFP_HF_CALL_IN_USING)) {
-			continue;
-		}
-
-		count++;
-	}
-
-	return count;
 }
 
 static void set_all_calls_held_state(struct bt_hfp_hf *hf, bool held)
@@ -991,6 +1116,10 @@ static void ag_indicator_handle_call(struct bt_hfp_hf *hf, uint32_t value)
 	struct bt_hfp_hf_call *call;
 
 	LOG_DBG("call %d", value);
+
+	if ((value != 0) && atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_INITIATING)) {
+		atomic_set_bit(hf->flags, BT_HFP_HF_FLAG_QUERY_CALLS);
+	}
 
 	if (value) {
 		call = get_dialing_call(hf);
@@ -1050,6 +1179,11 @@ static void ag_indicator_handle_call_setup(struct bt_hfp_hf *hf, uint32_t value)
 
 	LOG_DBG("call setup %d", value);
 
+	if ((value != BT_HFP_CALL_SETUP_NONE) &&
+	    atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_INITIATING)) {
+		atomic_set_bit(hf->flags, BT_HFP_HF_FLAG_QUERY_CALLS);
+	}
+
 	switch (value) {
 	case BT_HFP_CALL_SETUP_NONE:
 		if (call_count == 1) {
@@ -1083,6 +1217,11 @@ static void ag_indicator_handle_call_setup(struct bt_hfp_hf *hf, uint32_t value)
 	case BT_HFP_CALL_SETUP_INCOMING:
 		call = get_call_with_state(hf, BT_HFP_HF_CALL_STATE_INCOMING);
 		if (!call) {
+			if (!atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_CONNECTED)) {
+				LOG_INF("SLC is not connected. Will get call status via AT+CLCC");
+				break;
+			}
+
 			call = get_new_call(hf);
 			if (!call) {
 				break;
@@ -1103,6 +1242,11 @@ static void ag_indicator_handle_call_setup(struct bt_hfp_hf *hf, uint32_t value)
 	case BT_HFP_CALL_SETUP_OUTGOING:
 		call = get_call_with_state(hf, BT_HFP_HF_CALL_STATE_OUTGOING);
 		if (!call) {
+			if (!atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_CONNECTED)) {
+				LOG_INF("SLC is not connected. Will get call status via AT+CLCC");
+				break;
+			}
+
 			call = get_new_call(hf);
 			if (!call) {
 				break;
@@ -1137,9 +1281,16 @@ static void ag_indicator_handle_call_held(struct bt_hfp_hf *hf, uint32_t value)
 {
 	struct bt_hfp_hf_call *call;
 
-	k_work_reschedule(&hf->deferred_work, K_MSEC(HF_ENHANCED_CALL_STATUS_TIMEOUT));
+	if (atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_CONNECTED)) {
+		k_work_reschedule(&hf->deferred_work, K_MSEC(HF_ENHANCED_CALL_STATUS_TIMEOUT));
+	}
 
 	LOG_DBG("call setup %d", value);
+
+	if ((value != BT_HFP_CALL_HELD_NONE) &&
+	    atomic_test_bit(hf->flags, BT_HFP_HF_FLAG_INITIATING)) {
+		atomic_set_bit(hf->flags, BT_HFP_HF_FLAG_QUERY_CALLS);
+	}
 
 	switch (value) {
 	case BT_HFP_CALL_HELD_NONE:
@@ -1955,6 +2106,15 @@ static int at_cmd_init_start(struct bt_hfp_hf *hf)
 		LOG_WRN("Send next AT command");
 		hf->cmd_init_seq++;
 	}
+
+	if (ARRAY_SIZE(cmd_init_list) <= hf->cmd_init_seq) {
+		atomic_clear_bit(hf->flags, BT_HFP_HF_FLAG_INITIATING);
+		if (atomic_test_and_clear_bit(hf->flags, BT_HFP_HF_FLAG_QUERY_CALLS)) {
+			k_work_reschedule(&hf->deferred_work,
+					  K_MSEC(HF_ENHANCED_CALL_STATUS_TIMEOUT));
+		}
+	}
+
 	return err;
 }
 
@@ -2180,6 +2340,8 @@ int hf_slc_establish(struct bt_hfp_hf *hf)
 	int err;
 
 	LOG_DBG("");
+
+	atomic_set_bit(hf->flags, BT_HFP_HF_FLAG_INITIATING);
 
 	hf->cmd_init_seq = 0;
 	err = slc_init_start(hf);
@@ -3968,6 +4130,8 @@ static struct bt_hfp_hf *hfp_hf_create(struct bt_conn *conn)
 	LOG_DBG("conn %p", conn);
 
 	index = (size_t)bt_conn_index(conn);
+	__ASSERT(index < ARRAY_SIZE(bt_hfp_hf_pool), "Index is out of bounds");
+
 	hf = &bt_hfp_hf_pool[index];
 	if (hf->acl) {
 		LOG_ERR("HF connection (%p) is established", conn);
@@ -4037,7 +4201,7 @@ static void hfp_hf_sco_disconnected(struct bt_sco_chan *chan, uint8_t reason)
 static int bt_hfp_hf_sco_accept(const struct bt_sco_accept_info *info,
 		      struct bt_sco_chan **chan)
 {
-	static struct bt_sco_chan_ops ops = {
+	static const struct bt_sco_chan_ops ops = {
 		.connected = hfp_hf_sco_connected,
 		.disconnected = hfp_hf_sco_disconnected,
 	};
@@ -4047,6 +4211,8 @@ static int bt_hfp_hf_sco_accept(const struct bt_sco_accept_info *info,
 	LOG_DBG("conn %p", info->acl);
 
 	index = (size_t)bt_conn_index(info->acl);
+	__ASSERT(index < ARRAY_SIZE(bt_hfp_hf_pool), "Index is out of bounds");
+
 	hf = &bt_hfp_hf_pool[index];
 	if (hf->acl != info->acl) {
 		LOG_ERR("ACL %p of HF is unaligned with SCO's %p", hf->acl, info->acl);
@@ -4134,4 +4300,29 @@ int bt_hfp_hf_disconnect(struct bt_hfp_hf *hf)
 	}
 
 	return bt_rfcomm_dlc_disconnect(&hf->rfcomm_dlc);
+}
+
+int bt_hfp_hf_query_list_of_current_calls(struct bt_hfp_hf *hf)
+{
+	int err;
+
+	if ((hf == NULL) || (bt_hf == NULL) || (bt_hf->query_call == NULL)) {
+		return -EINVAL;
+	}
+
+	if (!IS_ENABLED(CONFIG_BT_HFP_HF_ECS)) {
+		return -ENOTSUP;
+	}
+
+	if (atomic_test_and_set_bit(hf->flags, BT_HFP_HF_FLAG_USR_CLCC_PND)) {
+		return -EBUSY;
+	}
+
+	err = hf_query_current_calls(hf);
+	if (err != 0) {
+		atomic_clear_bit(hf->flags, BT_HFP_HF_FLAG_USR_CLCC_PND);
+		LOG_ERR("Failed to query current calls, err %d", err);
+	}
+
+	return err;
 }

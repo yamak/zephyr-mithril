@@ -12,6 +12,7 @@
 #include <zephyr/drivers/bluetooth.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/crc.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/bluetooth/hci_types.h>
@@ -50,6 +51,7 @@ LOG_MODULE_REGISTER(bt_driver);
 #define HCI_CMD_BT_HOST_SLEEP_CONFIG_OCF                0x59U
 #define HCI_CMD_BT_HOST_SLEEP_CONFIG_PARAM_LENGTH       2U
 #define HCI_CMD_BT_HOST_SET_MAC_ADDR_PARAM_LENGTH       8U
+#define HCI_BT_MAC_ADDR_CRC_SEED                        0xFFFFFFFFU
 #define HCI_SET_MAC_ADDR_CMD                            0x0022U
 #define BT_USER_BD                                      254
 #define BD_ADDR_OUI                                     0x37U, 0x60U, 0x00U
@@ -94,7 +96,7 @@ static int nxp_bt_send_vs_command(uint16_t opcode, const uint8_t *params, uint8_
 		struct net_buf *buf;
 
 		/* Allocate buffer for the hci command */
-		buf = bt_hci_cmd_create(opcode, params_len);
+		buf = bt_hci_cmd_alloc(K_FOREVER);
 		if (buf == NULL) {
 			LOG_ERR("Unable to allocate command buffer");
 			return -ENOMEM;
@@ -178,6 +180,7 @@ static int bt_nxp_set_mac_address(const bt_addr_t *public_addr)
 	uint8_t addrOUI[BD_ADDR_OUI_PART_SIZE] = {BD_ADDR_OUI};
 	uint8_t uid[16] = {0};
 	uint8_t uuidLen;
+	uint32_t unique_val_crc = 0;
 	uint8_t params[HCI_CMD_BT_HOST_SET_MAC_ADDR_PARAM_LENGTH] = {
 		BT_USER_BD,
 		0x06U
@@ -188,12 +191,20 @@ static int bt_nxp_set_mac_address(const bt_addr_t *public_addr)
 	 */
 	if (bt_addr_eq(public_addr, BT_ADDR_ANY) || bt_addr_eq(public_addr, BT_ADDR_NONE)) {
 		PLATFORM_GetMCUUid(uid, &uuidLen);
-		/* Set 3 LSB of MAC address from UUID */
-		if (uuidLen > BD_ADDR_UUID_PART_SIZE) {
-			memcpy((void *)bleDeviceAddress,
-			       (void *)(uid + uuidLen - (BD_ADDR_UUID_PART_SIZE + 1)),
-			       BD_ADDR_UUID_PART_SIZE);
+
+		if (uuidLen > 0) {
+			/* Calculate a 32-bit IEEE CRC over the entire unique ID (uid)
+			 * Initial CRC value is 0xFFFFFFFFU for maximum randomization
+			 */
+			unique_val_crc = crc32_ieee_update(HCI_BT_MAC_ADDR_CRC_SEED, uid, uuidLen);
+			/* Copy the lower 3 bytes (24 bits) of the CRC result */
+			memcpy((void *)bleDeviceAddress, (const void *)&unique_val_crc,
+					BD_ADDR_UUID_PART_SIZE);
+		} else {
+			LOG_ERR("UUID is empty, cannot generate address.");
+			return -EFAULT;
 		}
+
 		/* Set 3 MSB of MAC address from OUI */
 		memcpy((void *)(bleDeviceAddress + BD_ADDR_UUID_PART_SIZE), (void *)addrOUI,
 		       BD_ADDR_OUI_PART_SIZE);
@@ -221,9 +232,19 @@ static bool is_hci_event_discardable(const uint8_t *evt_data)
 
 		switch (subevt_type) {
 		case BT_HCI_EVT_LE_ADVERTISING_REPORT:
-		case BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT:
 			ret = true;
 			break;
+#if defined(CONFIG_BT_EXT_ADV)
+		case BT_HCI_EVT_LE_EXT_ADVERTISING_REPORT:
+		{
+			const struct bt_hci_evt_le_ext_advertising_report *ext_adv =
+				(void *)&evt_data[3];
+
+			return (ext_adv->num_reports == 1) &&
+				   ((ext_adv->adv_info[0].evt_type &
+					 BT_HCI_LE_ADV_EVT_TYPE_LEGACY) != 0);
+		}
+#endif
 		default:
 			break;
 		}
@@ -403,23 +424,8 @@ static void hci_rx_cb(uint8_t packetType, uint8_t *data, uint16_t len)
 
 static int bt_nxp_send(const struct device *dev, struct net_buf *buf)
 {
-	uint8_t packetType;
-
 	ARG_UNUSED(dev);
 
-	switch (bt_buf_get_type(buf)) {
-	case BT_BUF_CMD:
-		packetType = BT_HCI_H4_CMD;
-		break;
-	case BT_BUF_ACL_OUT:
-		packetType = BT_HCI_H4_ACL;
-		break;
-	default:
-		LOG_ERR("Not supported type");
-		return -1;
-	}
-
-	net_buf_push_u8(buf, packetType);
 #if defined(HCI_NXP_LOCK_STANDBY_BEFORE_SEND)
 	/* Sending an HCI message requires to wake up the controller core if it's asleep.
 	 * Platform controllers may send reponses using non wakeable interrupts which can

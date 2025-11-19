@@ -52,8 +52,11 @@ config DYNAMIC_INTERRUPTS
 
 if LOG
 
+config LOG_BACKEND_XTENSA_SIM
+	default y if SIMULATOR_XTENSA
+
 config LOG_BACKEND_ADSP
-	default y
+	default y if !SIMULATOR_XTENSA
 
 endif # LOG
 
@@ -61,6 +64,14 @@ if KERNEL_VM_SUPPORT
 
 config KERNEL_VM_SIZE
 	default 0xfe0000
+
+endif
+
+if GDBSTUB
+
+# GDB expects 420 byte G-packet, so double for hexadecimal digits.
+config GDBSTUB_BUF_SZ
+	default 840 if GDBSTUB
 
 endif
 

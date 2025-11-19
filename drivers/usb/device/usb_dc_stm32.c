@@ -103,6 +103,11 @@ static const struct gpio_dt_spec ulpi_reset =
 #else
 #define USB_DC_STM32_FULL_SPEED             USB_OTG_SPEED_FULL
 #endif
+
+#if DT_HAS_COMPAT_STATUS_OKAY(st_stm32n6_otghs)
+#define USB_USBPHYC_CR_FSEL_24MHZ           USB_USBPHYC_CR_FSEL_1
+#endif
+
 /*
  * USB, USB_OTG_FS and USB_DRD_FS are defined in STM32Cube HAL and allows to
  * distinguish between two kind of USB DC. STM32 F0, F3, L0 and G4 series
@@ -195,6 +200,16 @@ struct usb_dc_stm32_state {
 static struct usb_dc_stm32_state usb_dc_stm32_state;
 
 /* Internal functions */
+
+static bool usb_dc_stm32_clock_enabled(void)
+{
+	const struct device *const clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
+
+	enum clock_control_status status = clock_control_get_status(
+						clk, (clock_control_subsys_t)&pclken[0]);
+
+	return status == CLOCK_CONTROL_STATUS_ON;
+}
 
 static struct usb_dc_stm32_ep_state *usb_dc_stm32_get_ep_state(uint8_t ep)
 {
@@ -344,7 +359,7 @@ static int usb_dc_stm32_phy_specific_clock_enable(const struct device *const clk
 #elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32n6_otghs)
 	/* Enable Vdd USB voltage monitoring */
 	LL_PWR_EnableVddUSBMonitoring();
-	while (__HAL_PWR_GET_FLAG(PWR_FLAG_USB33RDY)) {
+	while (!__HAL_PWR_GET_FLAG(PWR_FLAG_USB33RDY)) {
 		/* Wait for VDD33USB ready */
 	}
 	/* Enable VDDUSB */
@@ -424,10 +439,19 @@ static int usb_dc_stm32_clock_enable(void)
 	LL_AHB1_GRP1_DisableClockSleep(LL_AHB1_GRP1_PERIPH_USB1OTGHSULPI);
 #elif defined(CONFIG_SOC_SERIES_STM32U5X)
 	LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_USBPHY);
-	/* Both OTG HS and USBPHY sleep clock MUST be disabled here at the same time */
-	LL_AHB2_GRP1_DisableClockStopSleep(LL_AHB2_GRP1_PERIPH_OTG_HS ||
-						LL_AHB2_GRP1_PERIPH_USBPHY);
-#elif !DT_HAS_COMPAT_STATUS_OKAY(st_stm32n6_otghs)
+#elif DT_HAS_COMPAT_STATUS_OKAY(st_stm32n6_otghs)
+	/* Reset specific configuration bits before setting new values */
+	USB1_HS_PHYC->USBPHYC_CR &= ~USB_USBPHYC_CR_FSEL_Msk;
+
+	/* Configure the USB PHY Control Register to operate in the High frequency "24 MHz"
+	 * by setting the Frequency Selection (FSEL) bits 4 and 5 to 10,
+	 * which ensures proper communication.
+	 */
+	USB1_HS_PHYC->USBPHYC_CR |= USB_USBPHYC_CR_FSEL_24MHZ;
+
+	/* Peripheral OTGPHY clock enable */
+	LL_AHB5_GRP1_EnableClock(LL_AHB5_GRP1_PERIPH_OTGPHY1);
+#else
 	LL_AHB1_GRP1_DisableClockLowPower(LL_AHB1_GRP1_PERIPH_OTGHSULPI);
 #endif
 
@@ -852,6 +876,10 @@ int usb_dc_ep_clear_stall(const uint8_t ep)
 		return -EINVAL;
 	}
 
+	if (!ep_state->ep_stalled) {
+		return 0;
+	}
+
 	status = HAL_PCD_EP_ClrStall(&usb_dc_stm32_state.pcd, ep);
 	if (status != HAL_OK) {
 		LOG_ERR("HAL_PCD_EP_ClrStall failed(0x%02x), %d", ep,
@@ -920,6 +948,17 @@ int usb_dc_ep_disable(const uint8_t ep)
 
 	if (!ep_state) {
 		return -EINVAL;
+	}
+
+	if (!usb_dc_stm32_clock_enabled()) {
+		/*
+		 * During device teardown, EP disable is attempted after
+		 * the USB controller clock has been turned off. Accessing
+		 * it would do nothing and even deadlocks the SoC on certain
+		 * series: don't even bother trying. Return success as all
+		 * endpoints are disabled anyways when USB controller is off.
+		 */
+		return 0;
 	}
 
 	status = HAL_PCD_EP_Close(&usb_dc_stm32_state.pcd, ep);

@@ -388,6 +388,8 @@ device.
      - Sets UART device used for the Bluetooth monitor logging
    * - zephyr,bt-hci
      - Selects the HCI device used by the Bluetooth host stack
+   * - zephyr,camera
+     - Video input device, typically a camera.
    * - zephyr,canbus
      - Sets the default CAN controller
    * - zephyr,ccm
@@ -397,6 +399,8 @@ device.
        into
    * - zephyr,console
      - Sets UART device used by console driver
+   * - zephyr,crc
+     - Selects the CRC device used as an accelerator by the CRC subsystem
    * - zephyr,display
      - Sets the default display controller
    * - zephyr,keyboard-scan
@@ -454,16 +458,18 @@ device.
      - UART used for :ref:`device_mgmt`
    * - zephyr,uart-pipe
      - Sets UART device used by serial pipe driver
-   * - zephyr,usb-device
-     - USB device node. If defined and has a ``vbus-gpios`` property, these
-       will be used by the USB subsystem to enable/disable VBUS
    * - zephyr,led-strip
      - A LED-strip node which is used to determine the timings of the
        WS2812 GPIO driver
    * - zephyr,touch
      - touchscreen controller device node.
+   * - zephyr,videoenc
+     - Video encoder device, typically an H264 or MJPEG video encoder.
    * - mcuboot,ram-load-dev
      - When a Zephyr application is built to be loaded to RAM by MCUboot, with
        :kconfig:option:`CONFIG_MCUBOOT_BOOTLOADER_MODE_SINGLE_APP_RAM_LOAD`,
        this property is used to tell MCUboot the load address of the image, which
        will be the ``reg`` of the chosen node.
+   * - zephyr,boot-mode
+     - Used for :ref:`boot_mode_api` selection, part of :ref:`retention_api`, which specifies
+       what image on a device should be booted.

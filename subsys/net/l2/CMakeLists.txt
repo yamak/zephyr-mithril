@@ -8,7 +8,7 @@ if(CONFIG_NET_L2_DUMMY)
   add_subdirectory(dummy)
 endif()
 
-if (CONFIG_NET_OFFLOAD OR CONFIG_NET_SOCKETS_OFFLOAD)
+if(CONFIG_NET_OFFLOAD OR CONFIG_NET_SOCKETS_OFFLOAD)
   add_subdirectory(offloaded_netdev)
 endif()
 
@@ -24,7 +24,7 @@ if(CONFIG_NET_L2_IEEE802154)
   add_subdirectory(ieee802154)
 endif()
 
-if(CONFIG_NET_L2_OPENTHREAD_IMPLEMENTATION_ZEPHYR)
+if(CONFIG_NET_L2_OPENTHREAD)
   add_subdirectory(openthread)
 endif()
 

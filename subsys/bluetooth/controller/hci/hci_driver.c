@@ -91,20 +91,20 @@ isoal_status_t sink_sdu_alloc_hci(const struct isoal_sink    *sink_ctx,
 				  const struct isoal_pdu_rx  *valid_pdu,
 				  struct isoal_sdu_buffer    *sdu_buffer)
 {
+	struct net_buf *buf;
+
 	ARG_UNUSED(sink_ctx);
 	ARG_UNUSED(valid_pdu); /* TODO copy valid pdu into netbuf ? */
 
-	struct net_buf *buf  = bt_buf_get_rx(BT_BUF_ISO_IN, K_FOREVER);
+	buf = bt_buf_get_rx(BT_BUF_ISO_IN, K_FOREVER);
+	LL_ASSERT_ERR(buf);
 
-	if (buf) {
-		/* Increase reserved space for headers */
-		net_buf_reserve(buf, SDU_HCI_HDR_SIZE + net_buf_headroom(buf));
+	/* Increase reserved space for headers */
+	net_buf_reset(buf);
+	net_buf_reserve(buf, BT_BUF_RESERVE + SDU_HCI_HDR_SIZE);
 
-		sdu_buffer->dbuf = buf;
-		sdu_buffer->size = net_buf_tailroom(buf);
-	} else {
-		LL_ASSERT(0);
-	}
+	sdu_buffer->dbuf = buf;
+	sdu_buffer->size = net_buf_tailroom(buf);
 
 	return ISOAL_STATUS_OK;
 }
@@ -197,6 +197,8 @@ isoal_status_t sink_sdu_emit_hci(const struct isoal_sink             *sink_ctx,
 		hdr->handle = sys_cpu_to_le16(handle_packed);
 		hdr->len = sys_cpu_to_le16(len);
 
+		net_buf_push_u8(buf, BT_HCI_H4_ISO);
+
 		/* send fragment up the chain */
 		data->recv(dev, buf);
 	}
@@ -209,11 +211,13 @@ isoal_status_t sink_sdu_write_hci(void *dbuf,
 				  const uint8_t *pdu_payload,
 				  const size_t consume_len)
 {
+	struct net_buf *buf;
+
 	ARG_UNUSED(sdu_written);
 
-	struct net_buf *buf = (struct net_buf *) dbuf;
+	buf = (struct net_buf *) dbuf;
+	LL_ASSERT_ERR(buf);
 
-	LL_ASSERT(buf);
 	net_buf_add_mem(buf, pdu_payload, consume_len);
 
 	return ISOAL_STATUS_OK;
@@ -268,8 +272,8 @@ static int bt_recv_prio(const struct device *dev, struct net_buf *buf)
 {
 	const struct hci_driver_data *data = dev->data;
 
-	if (bt_buf_get_type(buf) == BT_BUF_EVT) {
-		struct bt_hci_evt_hdr *hdr = (void *)buf->data;
+	if (buf->data[0] == BT_HCI_H4_EVT) {
+		struct bt_hci_evt_hdr *hdr = (void *)(buf->data + 1);
 		uint8_t evt_flags = bt_hci_evt_get_flags(hdr->evt);
 
 		if ((evt_flags & BT_HCI_EVT_FLAG_RECV_PRIO) &&
@@ -361,7 +365,7 @@ static void prio_recv_thread(void *p1, void *p2, void *p3)
 			LOG_DBG("Num Complete: 0x%04x:%u", handle, num_cmplt);
 
 			err = bt_recv_prio(dev, buf);
-			LL_ASSERT(err == 0);
+			LL_ASSERT_DBG(err == 0);
 
 			k_yield();
 #endif /* CONFIG_BT_CONN || CONFIG_BT_CTLR_ADV_ISO */
@@ -389,7 +393,7 @@ static void prio_recv_thread(void *p1, void *p2, void *p3)
 				}
 
 				err = bt_recv_prio(dev, buf);
-				LL_ASSERT(err == 0);
+				LL_ASSERT_DBG(err == 0);
 
 				/* bt_recv_prio would not release normal evt
 				 * buf.
@@ -467,7 +471,7 @@ static void node_rx_recv(const struct device *dev)
 #if defined(CONFIG_BT_CONN) || defined(CONFIG_BT_CTLR_ADV_ISO)
 			struct net_buf *buf;
 
-			LL_ASSERT(node_rx == NULL);
+			LL_ASSERT_DBG(node_rx == NULL);
 
 			buf = bt_buf_get_evt(BT_HCI_EVT_NUM_COMPLETED_PACKETS,
 					     false, K_FOREVER);
@@ -479,7 +483,7 @@ static void node_rx_recv(const struct device *dev)
 			k_yield();
 
 #else /* !CONFIG_BT_CONN && !CONFIG_BT_CTLR_ADV_ISO */
-			LL_ASSERT(0);
+			LL_ASSERT_DBG(0);
 #endif /* !CONFIG_BT_CONN && !CONFIG_BT_CTLR_ADV_ISO */
 
 			num_cmplt = ll_rx_get((void *)&node_rx, &handle);
@@ -541,6 +545,7 @@ static inline struct net_buf *encode_node(struct node_rx_pdu *node_rx,
 	case HCI_CLASS_EVT_CONNECTION:
 	case HCI_CLASS_EVT_LLCP:
 		if (class == HCI_CLASS_EVT_DISCARDABLE) {
+			/* For BT_HCI_RAW, bt_buf_get_evt() calls bt_buf_get_rx(). */
 			buf = bt_buf_get_evt(BT_HCI_EVT_UNKNOWN, true,
 					     K_NO_WAIT);
 		} else {
@@ -585,7 +590,7 @@ static inline struct net_buf *encode_node(struct node_rx_pdu *node_rx,
 						isoal_rx_pdu_recombine(dp->sink_hdl, &pckt_meta);
 
 					/* TODO handle err */
-					LL_ASSERT(err == ISOAL_STATUS_OK);
+					LL_ASSERT_ERR(err == ISOAL_STATUS_OK);
 				}
 			}
 #endif /* CONFIG_BT_CTLR_CONN_ISO */
@@ -609,13 +614,13 @@ static inline struct net_buf *encode_node(struct node_rx_pdu *node_rx,
 				isoal_rx.pdu = (void *)node_rx->pdu;
 				err = isoal_rx_pdu_recombine(stream->dp->sink_hdl, &isoal_rx);
 
-				LL_ASSERT(err == ISOAL_STATUS_OK ||
-					  err == ISOAL_STATUS_ERR_SDU_ALLOC);
+				LL_ASSERT_ERR(err == ISOAL_STATUS_OK ||
+					      err == ISOAL_STATUS_ERR_SDU_ALLOC);
 			}
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
 
 		} else {
-			LL_ASSERT(0);
+			LL_ASSERT_DBG(0);
 		}
 
 		node_rx->hdr.next = NULL;
@@ -626,7 +631,7 @@ static inline struct net_buf *encode_node(struct node_rx_pdu *node_rx,
 #endif /* CONFIG_BT_CTLR_SYNC_ISO || CONFIG_BT_CTLR_CONN_ISO */
 
 	default:
-		LL_ASSERT(0);
+		LL_ASSERT_DBG(0);
 		break;
 	}
 
@@ -664,7 +669,7 @@ static inline struct net_buf *process_node(struct node_rx_pdu *node_rx)
 			}
 			break;
 		default:
-			LL_ASSERT(0);
+			LL_ASSERT_DBG(0);
 			break;
 		}
 	}
@@ -737,7 +742,7 @@ static inline struct net_buf *process_hbuf(struct node_rx_pdu *n)
 	case HCI_CLASS_EVT_DISCARDABLE:
 	case HCI_CLASS_EVT_REQUIRED:
 	default:
-		LL_ASSERT(0);
+		LL_ASSERT_DBG(0);
 		break;
 	}
 
@@ -819,7 +824,7 @@ static void recv_thread(void *p1, void *p2, void *p3)
 		int err;
 
 		err = k_poll(events, ARRAY_SIZE(events), K_FOREVER);
-		LL_ASSERT(err == 0 || err == -EINTR);
+		LL_ASSERT_ERR(err == 0 || err == -EINTR);
 
 		if (false) {
 
@@ -831,7 +836,7 @@ static void recv_thread(void *p1, void *p2, void *p3)
 #if !defined(CONFIG_BT_CTLR_RX_PRIO_STACK_SIZE)
 		} else if (events[EVENT_SEM].state == K_POLL_STATE_SEM_AVAILABLE) {
 			err = k_sem_take(events[EVENT_SEM].sem, K_NO_WAIT);
-			LL_ASSERT(err == 0);
+			LL_ASSERT_DBG(err == 0);
 
 			node_rx_recv(dev);
 #endif /* !CONFIG_BT_CTLR_RX_PRIO_STACK_SIZE */
@@ -869,8 +874,8 @@ static void recv_thread(void *p1, void *p2, void *p3)
 			frag = net_buf_ref(buf);
 			buf = net_buf_frag_del(NULL, buf);
 
-			if (frag->len) {
-				LOG_DBG("Packet in: type:%u len:%u", bt_buf_get_type(frag),
+			if (frag->len > 1) {
+				LOG_DBG("Packet in: type:%u len:%u", frag->data[0],
 					frag->len);
 
 				data->recv(dev, frag);
@@ -963,18 +968,18 @@ static int hci_driver_send(const struct device *dev, struct net_buf *buf)
 		return -EINVAL;
 	}
 
-	type = bt_buf_get_type(buf);
+	type = net_buf_pull_u8(buf);
 	switch (type) {
 #if defined(CONFIG_BT_CONN)
-	case BT_BUF_ACL_OUT:
+	case BT_HCI_H4_ACL:
 		err = acl_handle(dev, buf);
 		break;
 #endif /* CONFIG_BT_CONN */
-	case BT_BUF_CMD:
+	case BT_HCI_H4_CMD:
 		err = cmd_handle(dev, buf);
 		break;
 #if defined(CONFIG_BT_CTLR_ADV_ISO) || defined(CONFIG_BT_CTLR_CONN_ISO)
-	case BT_BUF_ISO_OUT:
+	case BT_HCI_H4_ISO:
 		err = iso_handle(dev, buf);
 		break;
 #endif /* CONFIG_BT_CTLR_ADV_ISO || CONFIG_BT_CTLR_CONN_ISO */
@@ -1022,14 +1027,14 @@ static int hci_driver_open(const struct device *dev, bt_hci_recv_t recv)
 			K_KERNEL_STACK_SIZEOF(prio_recv_thread_stack),
 			prio_recv_thread, (void *)dev, NULL, NULL,
 			K_PRIO_COOP(CONFIG_BT_DRIVER_RX_HIGH_PRIO), 0, K_NO_WAIT);
-	k_thread_name_set(&prio_recv_thread_data, "BT RX pri");
+	k_thread_name_set(&prio_recv_thread_data, "BT CTLR RX pri");
 #endif /* CONFIG_BT_CTLR_RX_PRIO_STACK_SIZE */
 
 	k_thread_create(&recv_thread_data, recv_thread_stack,
 			K_KERNEL_STACK_SIZEOF(recv_thread_stack),
 			recv_thread, (void *)dev, NULL, NULL,
 			K_PRIO_COOP(CONFIG_BT_RX_PRIO), 0, K_NO_WAIT);
-	k_thread_name_set(&recv_thread_data, "BT RX");
+	k_thread_name_set(&recv_thread_data, "BT CTLR RX");
 
 	LOG_DBG("Success.");
 
@@ -1043,7 +1048,7 @@ static int hci_driver_close(const struct device *dev)
 
 	/* Resetting the LL stops all roles */
 	err = ll_deinit();
-	LL_ASSERT(!err);
+	LL_ASSERT_DBG(!err);
 
 #if defined(CONFIG_BT_CTLR_RX_PRIO_STACK_SIZE)
 	/* Abort prio RX thread */

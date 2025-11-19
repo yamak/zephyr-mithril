@@ -122,6 +122,27 @@ To configure Segger RTT backend, add the following configurations to your build:
 Details on additional configuration settings are captured in:
 :zephyr_file:`samples/subsys/shell/shell_module/prj_minimal_rtt.conf`.
 
+.. _shell_rtt_west:
+
+Using west
+-----------
+
+Attach to and configure RTT with:
+
+.. code-block:: console
+
+   $ west rtt
+
+.. note::
+
+   If your default runner does not have support for RTT, check your board's documentation page for
+   any other runners that support RTT. You may then use the ``--runner`` option to specify a
+   different runner.
+
+  .. code-block:: console
+
+     $ west rtt --runner <runner>
+
 .. _shell_rtt_putty:
 
 Using PuTTY
@@ -643,6 +664,8 @@ The shell module supports the following meta keys:
      - Moves in history to next entry.
    * - :kbd:`Ctrl+p`
      - Moves in history to previous entry.
+   * - :kbd:`Ctrl+t`
+     - Toggles logs output on the shell when :kconfig:option:`CONFIG_SHELL_LOG_BACKEND` is set.
    * - :kbd:`Ctrl+u`
      - Clears the currently typed command.
    * - :kbd:`Ctrl+w`

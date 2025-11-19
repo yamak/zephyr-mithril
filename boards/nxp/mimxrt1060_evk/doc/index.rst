@@ -137,6 +137,10 @@ The MIMXRT1060 SoC has five pairs of pinmux/gpio controllers.
 +---------------+-----------------+---------------------------+
 | GPIO_AD_B1_01 | LPI2C1_SDA      | I2C                       |
 +---------------+-----------------+---------------------------+
+| GPIO_AD_B1_04 | LPUART3_CTS     | UART BT HCI               |
++---------------+-----------------+---------------------------+
+| GPIO_AD_B1_05 | LPUART3_RTS     | UART BT HCI               |
++---------------+-----------------+---------------------------+
 | GPIO_AD_B1_06 | LPUART3_TX      | UART BT HCI               |
 +---------------+-----------------+---------------------------+
 | GPIO_AD_B1_07 | LPUART3_RX      | UART BT HCI               |
@@ -309,7 +313,7 @@ This board supports 3 debug host tools. Please install your preferred host
 tool, then follow the instructions in `Configuring a Debug Probe`_ to
 configure the board appropriately.
 
-* :ref:`jlink-debug-host-tools` (Default, Supported by NXP)
+* :ref:`jlink-debug-host-tools` (Supported by NXP)
 * :ref:`linkserver-debug-host-tools` (Supported by NXP)
 * :ref:`pyocd-debug-host-tools` (Not Supported by NXP)
 
@@ -320,13 +324,27 @@ details).
 Configuring a Debug Probe
 =========================
 
-Two revisions of the RT1060 EVK exist. For the RT1060 EVK, J47/J48 are the SWD
-isolation jumpers, J42 is the DFU mode jumper, and the 20 pin JTAG/SWD header
-is present on J21. For the RT1060 EVKB, J9/J10 are the SWD isolation jumpers,
-J12 is the DFU mode jumper, and the 20 pin JTAG/SWD header is present on J2.
+Three revisions of the RT1060 EVK exist. For all of them, to replace the debug firmware, short the
+DFU jumper to boot the on board debugger to ISP mode.
 
-.. include:: ../../common/rt1xxx-lpclink2-debug.rst
-   :start-after: rt1xxx-lpclink2-probes
+* RT1060 EVK (Revision A)
+
+  * SWD isolation jumpers: J47/48
+  * 20 pin JTAG/SWD header: J21
+  * DFU mode jumper: J42
+
+* RT1060 EVKB
+
+  * SWD isolation jumpers: J9/10
+  * 20 pin JTAG/SWD header: J2
+  * DFU mode jumper: J12
+
+* RT1060 EVKC
+
+  * Debugger choice jumper: JP5
+  * DFU mode jumper: JP3
+
+.. include:: ../../common/rt1xxx-lpclink2-debug.rst.inc
 
 See `Using J-Link with MIMXRT1060-EVK or MIMXRT1064-EVK`_ or `Using J-Link with
 MIMXRT1060-EVKB`_ for more details.
@@ -428,6 +446,14 @@ should see the following message in the terminal:
    ***** Booting Zephyr OS v1.14.0-rc1 *****
    Hello World! mimxrt1060_evk//qspi
 
+Shield for M.2 Wi-Fi and BT Interface
+=====================================
+
+Rev C version is tested with :ref:`nxp_m2_wifi_bt` shield to attach any M.2 module
+with BT HCI UART interface and Wi-Fi SDIO interface. The shield binds the required NXP
+HCI driver or SDIO driver to perform firmware-load and other setup configurations
+for NXP SoC IW416/IW612/IW610.
+
 Troubleshooting
 ===============
 
@@ -463,8 +489,7 @@ If the west flash or debug commands fail, and the command hangs while executing
 runners.jlink, confirm the J-Link debug probe is configured, powered, and
 connected to the EVK properly.
 
-.. include:: ../../common/board-footer.rst
-   :start-after: nxp-board-footer
+.. include:: ../../common/board-footer.rst.inc
 
 .. _MIMXRT1060-EVK Website:
    https://www.nxp.com/design/development-boards/i-mx-evaluation-and-development-boards/i-mx-rt1060-evaluation-kit:MIMXRT1060-EVKB

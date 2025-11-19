@@ -202,41 +202,6 @@ static int hostapd_global_init(struct hapd_interfaces *interfaces, const char *e
 	return 0;
 }
 
-const char *zephyr_hostap_msg_ifname_cb(void *ctx)
-{
-	if (ctx == NULL) {
-		return NULL;
-	}
-
-	if ((*((int *)ctx)) == 0) {
-		struct wpa_supplicant *wpa_s = ctx;
-
-		return wpa_s->ifname;
-	}
-
-	struct hostapd_data *hapd = ctx;
-
-	if (hapd && hapd->conf) {
-		return hapd->conf->iface;
-	}
-
-	return NULL;
-}
-
-void zephyr_hostap_ctrl_iface_msg_cb(void *ctx, int level, enum wpa_msg_type type,
-				     const char *txt, size_t len)
-{
-	if (ctx == NULL) {
-		return;
-	}
-
-	if ((*((int *)ctx)) == 0) {
-		wpa_supplicant_msg_send(ctx, level, type, txt, len);
-	} else {
-		hostapd_msg_send(ctx, level, type, txt, len);
-	}
-}
-
 static int hostapd_driver_init(struct hostapd_iface *iface)
 {
 	struct wpa_init_params params;
@@ -386,7 +351,10 @@ struct hostapd_config *hostapd_config_read2(const char *fname)
 	bss->logger_stdout_level = HOSTAPD_LEVEL_INFO;
 	bss->logger_stdout       = 0xffff;
 	bss->nas_identifier      = os_strdup("ap.example.com");
-	os_memcpy(conf->country, "US ", 3);
+	/* Set regulatory domain */
+	os_memcpy(conf->country, CONFIG_WIFI_NM_HOSTAPD_REGULATORY_REGION, 2);
+	/* Set regulatory environment */
+	conf->country[2]     = CONFIG_WIFI_NM_HOSTAPD_REGULATORY_ENV;
 	conf->hw_mode        = HOSTAPD_MODE_IEEE80211G;
 	bss->wps_state       = WPS_STATE_CONFIGURED;
 	bss->eap_server      = 1;
@@ -407,9 +375,11 @@ struct hostapd_config *hostapd_config_read2(const char *fname)
 	bss->okc = 1;
 	conf->no_pri_sec_switch = 1;
 	conf->ht_op_mode_fixed  = 1;
+#if CONFIG_WIFI_NM_WPA_SUPPLICANT_11AC
 	conf->ieee80211ac       = 1;
 	conf->vht_oper_chwidth  = CHANWIDTH_USE_HT;
 	conf->vht_capab |= VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MAX;
+#endif
 #ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_11AX
 	conf->ieee80211ax       = 1;
 	conf->he_oper_chwidth   = CHANWIDTH_USE_HT;
@@ -569,4 +539,21 @@ void zephyr_hostapd_init(struct hapd_interfaces *interfaces)
 
 out:
 	return;
+}
+
+void zephyr_hostapd_msg(void *ctx, const char *txt, size_t len)
+{
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
+	struct hostapd_data *hapd = (struct hostapd_data *)ctx;
+#endif
+
+	if (!ctx || !txt) {
+		return;
+	}
+
+#ifdef CONFIG_WIFI_NM_WPA_SUPPLICANT_DPP
+	if (strncmp(txt, "DPP", 3) == 0) {
+		hostapd_handle_dpp_event(hapd, (char *)txt, len);
+	}
+#endif
 }

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <xtensa_asm2_s.h>
+#include <xtensa_asm2.inc.S>
 #include <zephyr/offsets.h>
 #include <offsets_short.h>
 #include <zephyr/syscall.h>
@@ -270,7 +270,11 @@ xtensa_userspace_enter:
 
 	l32i a6, a1, 24
 #ifdef CONFIG_XTENSA_MMU
+#ifdef CONFIG_XTENSA_MMU_FLUSH_AUTOREFILL_DTLBS_ON_SWAP
+	call4 xtensa_swap_update_page_tables
+#else
 	SWAP_PAGE_TABLE a6, a3, a7
+#endif
 #endif
 #ifdef CONFIG_XTENSA_MPU
 	call4 xtensa_mpu_map_write

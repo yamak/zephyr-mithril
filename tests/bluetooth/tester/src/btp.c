@@ -6,19 +6,27 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-#include <zephyr/kernel.h>
+#include <errno.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
-#include <zephyr/types.h>
+
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/uart.h>
-#include <zephyr/toolchain.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/uart_pipe.h>
-
+#include <zephyr/kernel.h>
+#include <zephyr/kernel/thread_stack.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/__assert.h>
+#include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/sys_clock.h>
+#include <zephyr/toolchain.h>
+#include <zephyr/types.h>
+
 #define LOG_MODULE_NAME bttester
 LOG_MODULE_REGISTER(LOG_MODULE_NAME, CONFIG_BTTESTER_LOG_LEVEL);
 
@@ -103,13 +111,17 @@ static void cmd_handler(void *p1, void *p2, void *p3)
 
 			if (len > BTP_DATA_MAX_SIZE) {
 				status = BTP_STATUS_FAILED;
+				LOG_ERR("Data len exceeds BTP MTU %u > %u", len, BTP_DATA_MAX_SIZE);
 			} else if (btp->index != hdr->index) {
 				status = BTP_STATUS_FAILED;
+				LOG_ERR("Index mismatch %u != %u", btp->index, hdr->index);
 			} else if ((btp->expect_len >= 0) && (btp->expect_len != len)) {
 				status = BTP_STATUS_FAILED;
+				LOG_ERR("len mismatch %u != %u", btp->expect_len, len);
 			} else {
 				status = btp->func(hdr->data, len,
 						   cmd->rsp, &rsp_len);
+				LOG_DBG("Command returns status %u", status);
 			}
 
 			/* This means that caller likely overwrote rsp buffer */

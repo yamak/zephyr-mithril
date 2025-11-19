@@ -42,9 +42,15 @@
 	RV_E(	op ra, __struct_arch_esf_ra_OFFSET(sp)	)
 
 #ifdef CONFIG_EXCEPTION_DEBUG
-/* Convenience macro for storing callee saved register [s0 - s11] states. */
-#define STORE_CALLEE_SAVED() \
-	RV_E(	sr s0, ___callee_saved_t_s0_OFFSET(sp)		);\
+/*
+ * Convenience macro for storing callee saved register [s0 - s11] states.
+ * Note: s0 is callee-saved and the exception entry code already saved it
+ * in struct arch_esf so it could be used as the current CPU pointer.
+ * Also stores address of csf to the esf. Clobbers t0.
+ */
+#define STORE_CALLEE_SAVED(esf) \
+		lr t0, __struct_arch_esf_s0_OFFSET(esf);\
+	RV_E(	sr t0, ___callee_saved_t_s0_OFFSET(sp)		);\
 	RV_E(	sr s1, ___callee_saved_t_s1_OFFSET(sp)		);\
 	RV_I(	sr s2, ___callee_saved_t_s2_OFFSET(sp)		);\
 	RV_I(	sr s3, ___callee_saved_t_s3_OFFSET(sp)		);\
@@ -55,7 +61,8 @@
 	RV_I(	sr s8, ___callee_saved_t_s8_OFFSET(sp)		);\
 	RV_I(	sr s9, ___callee_saved_t_s9_OFFSET(sp)		);\
 	RV_I(	sr s10, ___callee_saved_t_s10_OFFSET(sp)	);\
-	RV_I(	sr s11, ___callee_saved_t_s11_OFFSET(sp)	)
+	RV_I(	sr s11, ___callee_saved_t_s11_OFFSET(sp)	);\
+		sr sp __struct_arch_esf_csf_OFFSET(esf)
 #endif /* CONFIG_EXCEPTION_DEBUG */
 
 	.macro get_current_cpu dst
@@ -73,17 +80,13 @@ GTEXT(__soc_is_irq)
 #endif
 GTEXT(__soc_handle_irq)
 GTEXT(z_riscv_fault)
+GTEXT(z_irq_spurious)
 #ifdef CONFIG_RISCV_SOC_CONTEXT_SAVE
 GTEXT(__soc_save_context)
 GTEXT(__soc_restore_context)
 #endif /* CONFIG_RISCV_SOC_CONTEXT_SAVE */
 
-#ifdef CONFIG_EXCEPTION_DEBUG
-GTEXT(z_riscv_fatal_error_csf)
-#else
 GTEXT(z_riscv_fatal_error)
-#endif /* CONFIG_EXCEPTION_DEBUG */
-
 GTEXT(z_get_next_switch_handle)
 GTEXT(z_riscv_switch)
 GTEXT(z_riscv_thread_start)
@@ -225,7 +228,7 @@ SECTION_FUNC(exception.entry, _isr_wrapper)
 	bne t1, t2, no_fp
 	/* determine if we trapped on an FP instruction. */
 	csrr t2, mtval		/* get faulting instruction */
-#ifdef CONFIG_QEMU_TARGET
+#ifdef RISCV_NO_MTVAL_ON_FP_TRAP
 	/*
 	 * Some implementations may not support MTVAL in this capacity.
 	 * Notably QEMU when a CSR instruction is involved.
@@ -331,6 +334,7 @@ no_fp:	/* increment _current->arch.exception_depth */
 	 * function (that needs to be implemented by each SOC). The result is
 	 * returned via register a0 (1: interrupt, 0 exception)
 	 */
+
 #ifdef CONFIG_RISCV_SOC_EXCEPTION_FROM_IRQ
 	jal ra, __soc_is_irq
 	bnez a0, is_interrupt
@@ -388,8 +392,21 @@ no_fp:	/* increment _current->arch.exception_depth */
 	 * no_reschedule to restore stack.
 	 */
 	mv a0, sp
+#ifdef CONFIG_EXCEPTION_DEBUG
+	/* Make space for callee-saved registers */
+	addi sp, sp, -__callee_saved_t_SIZEOF
+	STORE_CALLEE_SAVED(a0)
+
+	call z_riscv_fault
+
+	/* Restore SP if z_riscv_fault returns before jumping to no_reschedule */
+	addi sp, sp, __callee_saved_t_SIZEOF
+
+	j no_reschedule
+#else
 	la ra, no_reschedule
 	tail z_riscv_fault
+#endif /* CONFIG_EXCEPTION_DEBUG */
 
 is_kernel_syscall:
 	/*
@@ -459,28 +476,10 @@ do_fault:
 1:	mv a1, sp
 
 #ifdef CONFIG_EXCEPTION_DEBUG
-	/*
-	 * Restore the s0 we saved early in ISR entry
-	 * so it shows up properly in the CSF.
-	 */
-	lr s0, __struct_arch_esf_s0_OFFSET(sp)
-
-	/* Allocate space for caller-saved registers on current thread stack */
 	addi sp, sp, -__callee_saved_t_SIZEOF
-
-	/* Save callee-saved registers to be passed as 3rd arg */
-	STORE_CALLEE_SAVED()		;
-	mv a2, sp
-
-#ifdef CONFIG_EXTRA_EXCEPTION_INFO
-	/* Store csf's addr into esf (a1 still holds the pointer to the esf at this point) */
-	sr a2 __struct_arch_esf_csf_OFFSET(a1)
-#endif /* CONFIG_EXTRA_EXCEPTION_INFO */
-
-	tail z_riscv_fatal_error_csf
-#else
-	tail z_riscv_fatal_error
+	STORE_CALLEE_SAVED(a1)
 #endif /* CONFIG_EXCEPTION_DEBUG */
+	tail z_riscv_fatal_error
 
 #if defined(CONFIG_IRQ_OFFLOAD)
 do_irq_offload:
@@ -646,6 +645,7 @@ on_irq_stack:
 	 */
 	jal ra, __soc_handle_irq
 
+#if defined CONFIG_GEN_SW_ISR_TABLE
 	/*
 	 * Call corresponding registered function in _sw_isr_table.
 	 * (table is 2-word wide, we should shift index accordingly)
@@ -659,6 +659,12 @@ on_irq_stack:
 
 	/* Load ISR function address in register t1 */
 	lr t1, RV_REGSIZE(t0)
+#else
+	/* Load spurious interrupt function in case _sw_isr_table does not exist */
+	la t1, z_irq_spurious
+	/* NULL as parameter */
+	li a0, 0
+#endif
 
 	/* Call ISR function */
 	jalr ra, t1, 0

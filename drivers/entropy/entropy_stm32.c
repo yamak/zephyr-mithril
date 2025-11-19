@@ -6,6 +6,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+#include <stddef.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/entropy.h>
@@ -16,6 +17,7 @@
 #include <errno.h>
 #include <soc.h>
 #include <zephyr/pm/policy.h>
+#include <stm32_bitops.h>
 #include <stm32_ll_bus.h>
 #include <stm32_ll_rcc.h>
 #include <stm32_ll_rng.h>
@@ -83,7 +85,7 @@ BUILD_ASSERT((CONFIG_ENTROPY_STM32_THR_POOL_SIZE &
  *  at least 32 MHz. See also: §6.2.2 "Peripheral clock details".
  */
 BUILD_ASSERT(!IS_ENABLED(CONFIG_SOC_STM32WB09XX) ||
-		CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC >= (32 * 1000 * 1000),
+		STM32_HCLK_FREQUENCY >= (32 * 1000 * 1000),
 	"STM32WB09: TRNG requires system clock frequency >= 32MHz");
 
 struct entropy_stm32_rng_dev_cfg {
@@ -204,13 +206,13 @@ static void configure_rng(void)
 #if DT_INST_NODE_HAS_PROP(0, nist_config)
 	/*
 	 * Configure the RNG_CR in compliance with the NIST SP800.
-	 * The nist-config is direclty copied from the DTS.
+	 * The nist-config is directly copied from the DTS.
 	 * The RNG clock must be 48MHz else the clock DIV is not adpated.
 	 * The RNG_CR_CONDRST is set to 1 at the same time the RNG_CR is written
 	 */
-	cur_nist_cfg = READ_BIT(rng->CR,
-				(RNG_CR_NISTC | RNG_CR_CLKDIV | RNG_CR_RNG_CONFIG1 |
-				RNG_CR_RNG_CONFIG2 | RNG_CR_RNG_CONFIG3
+	cur_nist_cfg = stm32_reg_read_bits(&rng->CR,
+					   (RNG_CR_NISTC | RNG_CR_CLKDIV | RNG_CR_RNG_CONFIG1 |
+					    RNG_CR_RNG_CONFIG2 | RNG_CR_RNG_CONFIG3
 #if defined(RNG_CR_ARDIS)
 				| RNG_CR_ARDIS
 	/* For STM32U5 series, the ARDIS bit7 is considered in the nist-config */
@@ -223,7 +225,7 @@ static void configure_rng(void)
 #endif /* health_test_config */
 
 	if (cur_nist_cfg != desired_nist_cfg || cur_htcr != desired_htcr) {
-		MODIFY_REG(rng->CR, cur_nist_cfg, (desired_nist_cfg | RNG_CR_CONDRST));
+		stm32_reg_modify_bits(&rng->CR, cur_nist_cfg, desired_nist_cfg | RNG_CR_CONDRST);
 
 #if DT_INST_NODE_HAS_PROP(0, health_test_config)
 #if DT_INST_NODE_HAS_PROP(0, health_test_magic)
@@ -326,9 +328,14 @@ static int recover_seed_error(RNG_TypeDef *rng)
 {
 	ll_rng_clear_seis(rng);
 
+#if !defined(CONFIG_SOC_SERIES_STM32WB0X)
+	/* After a noise source error is detected, 12 words must be read from the RNG_DR register
+	 * and discarded to restart the entropy generation.
+	 */
 	for (int i = 0; i < 12; ++i) {
 		(void)ll_rng_read_rand_data(rng);
 	}
+#endif /* !CONFIG_SOC_SERIES_STM32WB0X */
 
 	if (ll_rng_is_active_seis(rng) != 0) {
 		return -EIO;
@@ -338,7 +345,7 @@ static int recover_seed_error(RNG_TypeDef *rng)
 }
 #endif /* !STM32_CONDRST_SUPPORT */
 
-static int random_byte_get(void)
+static int random_sample_get(rng_sample_t *rnd_sample)
 {
 	int retval = -EAGAIN;
 	unsigned int key;
@@ -368,8 +375,8 @@ static int random_byte_get(void)
 			goto out;
 		}
 
-		retval = ll_rng_read_rand_data(rng);
-		if (retval == 0) {
+		*rnd_sample = ll_rng_read_rand_data(rng);
+		if (*rnd_sample == 0) {
 			/* A seed error could have occurred between RNG_SR
 			 * polling and RND_DR output reading.
 			 */
@@ -377,7 +384,7 @@ static int random_byte_get(void)
 			goto out;
 		}
 
-		retval &= 0xFF;
+		retval = 0;
 	}
 
 out:
@@ -390,6 +397,8 @@ out:
 static uint16_t generate_from_isr(uint8_t *buf, uint16_t len)
 {
 	uint16_t remaining_len = len;
+	rng_sample_t rnd_sample;
+	int ret;
 
 #if !IRQLESS_TRNG
 	__ASSERT_NO_MSG(!irq_is_enabled(IRQN));
@@ -403,7 +412,7 @@ static uint16_t generate_from_isr(uint8_t *buf, uint16_t len)
 	if (ll_rng_is_active_secs(entropy_stm32_rng_data.rng) ||
 		ll_rng_is_active_seis(entropy_stm32_rng_data.rng)) {
 
-		(void)random_byte_get(); /* this will recover the error */
+		(void)random_sample_get(&rnd_sample); /* this will recover the error */
 
 		return 0; /* return cnt is null : no random data available */
 	}
@@ -418,8 +427,6 @@ static uint16_t generate_from_isr(uint8_t *buf, uint16_t len)
 #endif /* !IRQLESS_TRNG */
 
 	do {
-		int byte;
-
 		while (ll_rng_is_active_drdy(
 				entropy_stm32_rng_data.rng) != 1) {
 #if !IRQLESS_TRNG
@@ -441,16 +448,23 @@ static uint16_t generate_from_isr(uint8_t *buf, uint16_t len)
 #endif /* !IRQLESS_TRNG */
 		}
 
-		byte = random_byte_get();
+		ret = random_sample_get(&rnd_sample);
 #if !IRQLESS_TRNG
 		NVIC_ClearPendingIRQ(IRQN);
-#endif /* IRQLESS_TRNG */
+#endif /* !IRQLESS_TRNG */
 
-		if (byte < 0) {
+		if (ret < 0) {
 			continue;
 		}
 
-		buf[--remaining_len] = byte;
+		/* push each byte of the RNG sample in buffer */
+		size_t i = sizeof(rnd_sample);
+
+		while (remaining_len && i) {
+			buf[--remaining_len] = (uint8_t)(rnd_sample & 0xFFu);
+			rnd_sample >>= 8;
+			i--;
+		}
 	} while (remaining_len);
 
 	return len;
@@ -604,31 +618,47 @@ static void rng_pool_init(struct rng_pool *rngp, uint16_t size,
 
 static int perform_pool_refill(void)
 {
-	int byte, ret;
+	rng_sample_t rnd_sample;
+	bool refilled_thr = false;
+	int ret;
 
-	byte = random_byte_get();
-	if (byte < 0) {
-		return -EIO;
+	ret = random_sample_get(&rnd_sample);
+	if (ret < 0) {
+		return ret;
 	}
 
-	ret = rng_pool_put((struct rng_pool *)(entropy_stm32_rng_data.isr),
-				byte);
-	if (ret < 0) {
-		ret = rng_pool_put(
-				(struct rng_pool *)(entropy_stm32_rng_data.thr),
-				byte);
-		if (ret < 0) {
-#if !IRQLESS_TRNG
-			irq_disable(IRQN);
-#endif /* !IRQLESS_TRNG */
-			release_rng();
-			pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE, PM_ALL_SUBSTATES);
-			if (IS_ENABLED(CONFIG_PM_S2RAM)) {
-				pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_RAM, PM_ALL_SUBSTATES);
-			}
-			entropy_stm32_rng_data.filling_pools = false;
-		}
+	/* push each byte of the RNG sample in pools */
+	for (size_t i = 0; i < sizeof(rnd_sample); i++, rnd_sample >>= 8) {
+		uint8_t byte = rnd_sample & 0xFFu;
 
+		ret = rng_pool_put((struct rng_pool *)(entropy_stm32_rng_data.isr), byte);
+		if (ret < 0) {
+			/* Take note that data has been added to thread pool */
+			refilled_thr = true;
+
+			ret = rng_pool_put((struct rng_pool *)(entropy_stm32_rng_data.thr), byte);
+			if (ret < 0) {
+#if !IRQLESS_TRNG
+				irq_disable(IRQN);
+#endif /* !IRQLESS_TRNG */
+				release_rng();
+				pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_IDLE,
+					PM_ALL_SUBSTATES);
+				if (IS_ENABLED(CONFIG_PM_S2RAM)) {
+					pm_policy_state_lock_put(PM_STATE_SUSPEND_TO_RAM,
+						PM_ALL_SUBSTATES);
+				}
+				entropy_stm32_rng_data.filling_pools = false;
+				break;
+			}
+		}
+	}
+
+	if (refilled_thr) {
+		/**
+		 * Wake up threads that may be waiting for new data to be
+		 * available in thread pool if we added entropy in it.
+		 */
 		k_sem_give(&entropy_stm32_rng_data.sem_sync);
 	}
 
@@ -645,7 +675,8 @@ static void trng_poll_work_item(struct k_work *work)
 	if (ll_rng_is_active_secs(entropy_stm32_rng_data.rng) ||
 		ll_rng_is_active_seis(entropy_stm32_rng_data.rng)) {
 
-		(void)random_byte_get(); /* this will recover the error */
+		rng_sample_t dummy;
+		(void)random_sample_get(&dummy); /* this will recover the error */
 	} else if (ll_rng_is_active_drdy(rng)) {
 		/* Entropy available: read it and fill pools */
 		int res = perform_pool_refill();

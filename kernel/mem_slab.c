@@ -114,11 +114,12 @@ static int create_free_list(struct k_mem_slab *slab)
 	slab->free_list = NULL;
 	p = slab->buffer + slab->info.block_size * (slab->info.num_blocks - 1);
 
-	while (p >= slab->buffer) {
+	for (int i = slab->info.num_blocks - 1; i >= 0; i--) {
 		*(char **)p = slab->free_list;
 		slab->free_list = p;
 		p -= slab->info.block_size;
 	}
+
 	return 0;
 }
 
@@ -236,7 +237,7 @@ int k_mem_slab_alloc(struct k_mem_slab *slab, void **mem, k_timeout_t timeout)
 			 "slab corruption detected");
 
 #ifdef CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION
-		slab->info.max_used = MAX(slab->info.num_used,
+		slab->info.max_used = max(slab->info.num_used,
 					  slab->info.max_used);
 #endif /* CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION */
 

@@ -6,17 +6,18 @@
 
 /**
  * @file drivers/stepper.h
- * @brief Public API for Stepper Driver
+ * @ingroup stepper_interface
+ * @brief Main header file for stepper driver API.
  */
 
 #ifndef ZEPHYR_INCLUDE_DRIVERS_STEPPER_H_
 #define ZEPHYR_INCLUDE_DRIVERS_STEPPER_H_
 
 /**
- * @brief Stepper Driver Interface
- * @defgroup stepper_interface Stepper Driver Interface
+ * @brief Interfaces for stepper motor controllers.
+ * @defgroup stepper_interface Stepper
  * @since 4.0
- * @version 0.1.0
+ * @version 0.8.0
  * @ingroup io_interfaces
  * @{
  */
@@ -237,7 +238,7 @@ __subsystem struct stepper_driver_api {
 /**
  * @brief Enable stepper driver
  *
- * @details Enabling the driver will energize the coils, however not set the stepper in motion.
+ * @details Enabling the driver shall switch on the power stage and energize the coils.
  *
  * @param dev pointer to the stepper driver instance
  *
@@ -256,10 +257,13 @@ static inline int z_impl_stepper_enable(const struct device *dev)
 /**
  * @brief Disable stepper driver
  *
- * @details Disabling the driver shall cancel all active movements and de-energize the coils.
+ * @details Disabling the driver shall switch off the power stage and de-energize the coils.
+ * Disabling the stepper does not implicitly stop the stepper. If the motor shall not move after
+ * re-enabling the stepper than consider calling stepper_stop() before.
  *
  * @param dev pointer to the stepper driver instance
  *
+ * @retval  -ENOTSUP Disabling of driver is not supported.
  * @retval -EIO Error during Disabling
  * @retval 0 Success
  */
@@ -280,6 +284,7 @@ static inline int z_impl_stepper_disable(const struct device *dev)
  *
  * @retval -EIO General input / output error
  * @retval -ENOSYS If not implemented by device driver
+ * @retval -EINVAL If the requested resolution is invalid
  * @retval -ENOTSUP If the requested resolution is not supported
  * @retval 0 Success
  */
@@ -293,6 +298,10 @@ static inline int z_impl_stepper_set_micro_step_res(const struct device *dev,
 
 	if (api->set_micro_step_res == NULL) {
 		return -ENOSYS;
+	}
+
+	if (!VALID_MICRO_STEP_RES(resolution)) {
+		return -EINVAL;
 	}
 	return api->set_micro_step_res(dev, resolution);
 }
@@ -345,7 +354,9 @@ static inline int z_impl_stepper_set_reference_position(const struct device *dev
 }
 
 /**
- * @brief Get the actual a.k.a reference position of the stepper
+ * @brief Get the actual step count for a given stepper.
+ * @note This function does not guarantee that the returned position is the exact current
+ * position. For precise positioning, encoders should be used in addition to the stepper driver.
  *
  * @param dev pointer to the stepper driver instance
  * @param value The actual position to get in micro-steps
@@ -423,14 +434,14 @@ static inline int z_impl_stepper_set_microstep_interval(const struct device *dev
 /**
  * @brief Set the micro-steps to be moved from the current position i.e. relative movement
  *
- * @details The stepper will move by the given number of micro-steps from the current position.
+ * @note The stepper will move by the given number of micro-steps from the current position.
  * This function is non-blocking.
  *
  * @param dev pointer to the stepper driver instance
  * @param micro_steps target micro-steps to be moved from the current position
  *
- * @retval -ECANCELED If the stepper is disabled
  * @retval -EIO General input / output error
+ * @retval -EINVAL If the timing for steps is incorrectly configured
  * @retval 0 Success
  */
 __syscall int stepper_move_by(const struct device *dev, int32_t micro_steps);
@@ -445,15 +456,14 @@ static inline int z_impl_stepper_move_by(const struct device *dev, const int32_t
 /**
  * @brief Set the absolute target position of the stepper
  *
- * @details The stepper will move to the given micro-steps position from the reference position.
+ * @note The stepper will move to the given micro-steps position from the reference position.
  * This function is non-blocking.
  *
  * @param dev pointer to the stepper driver instance
  * @param micro_steps target position to set in micro-steps
  *
- * @retval -ECANCELED If the stepper is disabled
  * @retval -EIO General input / output error
- * @retval -ENOSYS If not implemented by device driver
+ * @retval -EINVAL If the timing for steps is incorrectly configured
  * @retval 0 Success
  */
 __syscall int stepper_move_to(const struct device *dev, int32_t micro_steps);
@@ -471,15 +481,15 @@ static inline int z_impl_stepper_move_to(const struct device *dev, const int32_t
 /**
  * @brief Run the stepper with a given step interval in a given direction
  *
- * @details The stepper shall be set into motion and run continuously until
- * stalled or stopped using some other command, for instance, stepper_enable(false). This
+ * @note The stepper shall be set into motion and run continuously until
+ * stalled or stopped using some other command, for instance, stepper_stop(). This
  * function is non-blocking.
  *
  * @param dev pointer to the stepper driver instance
  * @param direction The direction to set
  *
- * @retval -ECANCELED If the stepper is disabled
  * @retval -EIO General input / output error
+ * @retval -EINVAL If the timing for steps is incorrectly configured
  * @retval -ENOSYS If not implemented by device driver
  * @retval 0 Success
  */
@@ -498,7 +508,7 @@ static inline int z_impl_stepper_run(const struct device *dev,
 
 /**
  * @brief Stop the stepper
- * @details Cancel all active movements, however keep the coils energized.
+ * @note Cancel all active movements.
  *
  * @param dev pointer to the stepper driver instance
  *

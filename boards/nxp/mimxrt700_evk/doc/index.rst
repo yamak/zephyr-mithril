@@ -128,6 +128,18 @@ To build the hello_world sample for the i.MX RT700 HiFi 4 DSP core:
    :board: mimxrt700_evk/mimxrt798s/hifi4
    :goals: build
 
+Multicore Core Operation
+************************
+
+The MIMXRT700-EVK supports multicore core operation with all cores, the Cortex-M33 CPU0, Cortex-M33 CPU1,
+HiFi1 DSP and HiFi4 DSP.
+By default, the CM33 CPU0 core is the boot core and is responsible for initializing the system and
+starting the CM33 CPU1 core and/or HiFi4 DSP.
+The CM33 CPU1 is responsible to boot the HiFi1 DSP.
+
+Usually boot process is that core responsible for booting the secondary core(s) will copy its firmware/image
+to the designated memory location and then release the secondary core from reset.
+
 Programming and Debugging
 *************************
 
@@ -175,6 +187,9 @@ Connect a USB cable from your PC to J54, and use the serial terminal of your cho
 Flashing
 ========
 
+The DIP switch SW10 selects the boot options.  Set SW10 to Off-On (01) to boot from the default
+external flash on XSPI0.
+
 Here is an example for the :zephyr:code-sample:`hello_world` application. This example uses the
 :ref:`jlink-debug-host-tools` as default.
 
@@ -210,11 +225,31 @@ should see the following message in the terminal:
    *** Booting Zephyr OS v3.7.0 ***
    Hello World! mimxrt700_evk/mimxrt798s/cm33_cpu0
 
-.. include:: ../../common/board-footer.rst
-   :start-after: nxp-board-footer
+.. include:: ../../common/board-footer.rst.inc
 
 .. _i.MX RT700 Website:
    https://www.nxp.com/products/processors-and-microcontrollers/arm-microcontrollers/i-mx-rt-crossover-mcus/i-mx-rt700-crossover-mcu-with-arm-cortex-m33-npu-dsp-and-gpu-cores:i.MX-RT700
 
 .. _MIMXRT700-EVK Debug Firmware:
    https://www.nxp.com/docs/en/application-note/AN13206.pdf
+
+Display Support
+***************
+
+The mimxrt700_evk board supports following in-tree display module(s). Setup for
+each module is described below:
+
+NXP G1120B0MIPI MIPI Display
+============================
+
+The :ref:`g1120b0mipi` connects to the board's MIPI connector J52
+directly, but some modifications are required (see
+:zephyr_file:`boards/shields/g1120b0mipi/boards/mimxrt700_evk_mimxrt798s_cm33_cpu0.overlay`
+for a list). The display sample can be built for this module like so:
+
+.. zephyr-app-commands::
+   :board: mimxrt700_evk
+   :shield: g1120b0mipi
+   :zephyr-app: samples/drivers/display
+   :goals: build
+   :compact:

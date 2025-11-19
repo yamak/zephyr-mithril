@@ -48,11 +48,15 @@
 
 		sram0: memory@20000000 {
 			compatible = "mmio-sram";
+			#address-cells = <1>;
+			#size-cells = <1>;
 		};
 
 		sram1: memory@21000000 {
 			compatible = "zephyr,memory-region", "mmio-sram";
 			zephyr,memory-region = "SRAM1";
+			#address-cells = <1>;
+			#size-cells = <1>;
 		};
 
 		clock: clock@41005000 {
@@ -243,6 +247,7 @@
 			reg = <0x41016000 0x1000>;
 			cc-num = <4>;
 			interrupts = <22 NRF_DEFAULT_IRQ_PRIORITY>;
+			clock-frequency = <32768>;
 			status = "disabled";
 		};
 
@@ -307,7 +312,6 @@
 
 			#address-cells = <1>;
 			#size-cells = <1>;
-
 
 			flash1: flash@1000000 {
 				compatible = "soc-nv-flash";

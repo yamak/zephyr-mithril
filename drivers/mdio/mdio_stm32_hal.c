@@ -38,8 +38,8 @@ static int mdio_stm32_read(const struct device *dev, uint8_t prtad,
 {
 	struct mdio_stm32_data *const dev_data = dev->data;
 	ETH_HandleTypeDef *heth = &dev_data->heth;
+	HAL_StatusTypeDef ret;
 	uint32_t read;
-	int ret;
 
 	k_sem_take(&dev_data->sem, K_FOREVER);
 
@@ -59,7 +59,7 @@ static int mdio_stm32_read(const struct device *dev, uint8_t prtad,
 
 	*data = read & ADIN1100_REG_VALUE_MASK;
 
-	return ret;
+	return 0;
 }
 
 static int mdio_stm32_write(const struct device *dev, uint8_t prtad,
@@ -67,7 +67,7 @@ static int mdio_stm32_write(const struct device *dev, uint8_t prtad,
 {
 	struct mdio_stm32_data *const dev_data = dev->data;
 	ETH_HandleTypeDef *heth = &dev_data->heth;
-	int ret;
+	HAL_StatusTypeDef ret;
 
 	k_sem_take(&dev_data->sem, K_FOREVER);
 
@@ -85,7 +85,7 @@ static int mdio_stm32_write(const struct device *dev, uint8_t prtad,
 		return -EIO;
 	}
 
-	return ret;
+	return 0;
 }
 
 #ifdef CONFIG_ETH_STM32_HAL_API_V1
@@ -99,7 +99,7 @@ static void eth_set_mdio_clock_range_for_hal_v1(ETH_HandleTypeDef *heth)
 	tmpreg1 &= ETH_MACMIIAR_CR_MASK;
 
 	/* Set CR bits depending on CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC value */
-#ifdef SOC_SERIES_STM32F1X
+#ifdef CONFIG_SOC_SERIES_STM32F1X
 	if ((CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC >= 20000000U) &&
 	    (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC < 35000000U)) {
 		/* CSR Clock Range between 20-35 MHz */
@@ -112,7 +112,7 @@ static void eth_set_mdio_clock_range_for_hal_v1(ETH_HandleTypeDef *heth)
 		/* CSR Clock Range between 60-72 MHz */
 		tmpreg1 |= (uint32_t)ETH_MACMIIAR_CR_DIV42;
 	}
-#else  /* SOC_SERIES_STM32F2X */
+#else  /* CONFIG_SOC_SERIES_STM32F2X */
 	if ((CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC >= 20000000U) &&
 	    (CONFIG_SYS_CLOCK_HW_CYCLES_PER_SEC < 35000000U)) {
 		/* CSR Clock Range between 20-35 MHz */
@@ -129,7 +129,7 @@ static void eth_set_mdio_clock_range_for_hal_v1(ETH_HandleTypeDef *heth)
 		/* CSR Clock Range between 100-120 MHz */
 		tmpreg1 |= (uint32_t)ETH_MACMIIAR_CR_Div62;
 	}
-#endif /* SOC_SERIES_STM32F2X */
+#endif /* CONFIG_SOC_SERIES_STM32F1X */
 
 	/* Write to ETHERNET MAC MIIAR: Configure the ETHERNET CSR Clock Range */
 	(heth->Instance)->MACMIIAR = (uint32_t)tmpreg1;
