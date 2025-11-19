@@ -11,5 +11,14 @@ config SOC_MITHRIL
 	select INCLUDE_RESET_VECTOR
 	select HAS_MITHRIL_HAL
 	select USE_MITHRIL_HAL_DSEE
-	
+
+# Override LLVM linker choice default to use lld
+choice LLVM_LINKER
+	default LLVM_USE_LLD if "${ZEPHYR_TOOLCHAIN_VARIANT}" = "llvm"
+endchoice
+
+# Override runtime library choice default to use compiler-rt
+choice RTLIB_IMPLEMENTATION
+	default COMPILER_RT_RTLIB if COMPILER_RT_SUPPORTED
+endchoice
 	
