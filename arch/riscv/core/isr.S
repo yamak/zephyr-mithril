@@ -194,6 +194,15 @@ SECTION_FUNC(exception.entry, _isr_wrapper)
 #else
 	/* Save caller-saved registers on current thread stack. */
 	addi sp, sp, -__struct_arch_esf_SIZEOF
+
+#ifdef CONFIG_RISCV_XPAC_RET
+
+	/*Save mithril pac registers to esf*/
+	pac.store pr0, __struct_arch_esf_pr0_OFFSET(sp)
+	pac.store pr1, __struct_arch_esf_pr1_OFFSET(sp)
+
+#endif /* CONFIG_RISCV_ISA_EXT_XPAC */
+
 	DO_CALLER_SAVED(sr)		;
 #endif /* CONFIG_RISCV_SOC_HAS_ISR_STACKING */
 
@@ -421,6 +430,28 @@ is_kernel_syscall:
 	lr t0, __struct_arch_esf_mepc_OFFSET(sp)
 	addi t0, t0, 4
 	sr t0, __struct_arch_esf_mepc_OFFSET(sp)
+
+#ifdef CONFIG_RISCV_XPAC_RET
+	/*
+	 * CRITICAL: Recompute PR1 after modifying MEPC.
+	 * PR1 was computed at trap entry with original MEPC (ecall address).
+	 * Since we incremented MEPC by 4 to skip ecall, we must recompute PR1
+	 * with the new MEPC value, otherwise mret will fail PAC verification.
+	 *
+	 * PR1 = QARMA({mepc, sp_at_trap_entry}, tweak)
+	 * tweak = (s0 || s1) ^ mpacctx
+	 *
+	 * IMPORTANT: s0 has been modified to &_current_cpu, but mret will
+	 * verify with original s0 (restored from ESF). We must temporarily
+	 * restore original s0 for correct tweak computation.
+	 */
+	mv t2, s0                              /* t2 = save current s0 (&_current_cpu) */
+	lr s0, __struct_arch_esf_s0_OFFSET(sp) /* s0 = original s0 from ESF */
+	addi t1, sp, __struct_arch_esf_SIZEOF  /* t1 = sp at trap entry (before ESF alloc) */
+	pac.sign pr1, t1, t0                   /* pr1 = new PAC with updated mepc and correct tweak */
+	pac.store pr1, __struct_arch_esf_pr1_OFFSET(sp)  /* save to ESF */
+	mv s0, t2                              /* s0 = restore &_current_cpu */
+#endif
 
 #if defined(CONFIG_PMP_STACK_GUARD) && defined(CONFIG_MULTITHREADING)
 	/* Re-activate PMP for m-mode */
@@ -802,6 +833,16 @@ fp_trap_exit:
 #ifdef CONFIG_RISCV_SOC_HAS_ISR_STACKING
 	SOC_ISR_SW_UNSTACKING
 #else
+	/*
+	 * Restore PAC registers from ESF before mret.
+	 * pr0: Interrupted code's return address PAC.
+	 * pr1: Trap context PAC (computed at trap entry or initialized for new threads).
+	 */
+#ifdef CONFIG_RISCV_XPAC_RET
+	pac.load pr0, __struct_arch_esf_pr0_OFFSET(sp)
+	pac.load pr1, __struct_arch_esf_pr1_OFFSET(sp)
+
+#endif
 	/* Restore caller-saved registers from thread stack */
 	DO_CALLER_SAVED(lr)
 

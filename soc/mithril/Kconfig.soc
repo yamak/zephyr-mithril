@@ -3,6 +3,16 @@ config SOC_MITHRIL
 	help
 	  Mithril system implementation
 
+config RISCV_XPAC_RET
+	bool "Enable XPAC return address protection"
+	default y
+	depends on SOC_MITHRIL && RISCV_ISA_EXT_XPAC
+	help
+	  Enables -mxpac-ret compiler flag for Mithril's XPAC-based return
+	  address protection. This adds automatic PAC store and load to
+	  function prologues and epilogues.
+
+
 config INSTR_MEM_SIZE
 	int "Mithril Instruction Memory Size in kB"
 	help

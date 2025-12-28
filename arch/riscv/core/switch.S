@@ -43,6 +43,10 @@ SECTION_FUNC(TEXT, z_riscv_switch)
 	/* Save the old thread's stack pointer */
 	sr sp, _thread_offset_to_sp(a1)
 
+#ifdef CONFIG_RISCV_XPAC_RET
+	pac.store pr0, _thread_offset_to_pr0(a1)
+#endif
+
 	/* Set thread->switch_handle = thread to mark completion */
 	sr a1, ___thread_t_switch_handle_OFFSET(a1)
 
@@ -89,6 +93,12 @@ not_user_task:
 
 	/* Restore the new thread's callee-saved registers */
 	DO_CALLEE_SAVED(lr, a0)
+
+#ifdef CONFIG_RISCV_XPAC_RET
+	pac.load pr0, _thread_offset_to_pr0(a0)
+	lr t0, _thread_offset_to_xpacctx(a0)
+	csrw 0xBC5, t0
+#endif
 
 	/* Return to arch_switch() or _irq_wrapper() */
 	ret

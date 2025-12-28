@@ -45,6 +45,11 @@ GEN_OFFSET_SYM(_callee_saved_t, s10);
 GEN_OFFSET_SYM(_callee_saved_t, s11);
 #endif /* !CONFIG_RISCV_ISA_RV32E */
 
+#if defined(CONFIG_RISCV_XPAC_RET)
+GEN_OFFSET_SYM(_callee_saved_t, pr0);
+GEN_OFFSET_SYM(_callee_saved_t, xpacctx);
+#endif /* CONFIG_RISCV_XPAC_RET */
+
 #if defined(CONFIG_FPU_SHARING)
 
 GEN_OFFSET_SYM(z_riscv_fp_context_t, fa0);
@@ -121,13 +126,17 @@ GEN_OFFSET_STRUCT(arch_esf, s0);
 #ifdef CONFIG_USERSPACE
 GEN_OFFSET_STRUCT(arch_esf, sp);
 #endif
-
+#if defined(CONFIG_RISCV_XPAC_RET)
+GEN_OFFSET_STRUCT(arch_esf, pr0);
+GEN_OFFSET_STRUCT(arch_esf, pr1);
+#endif /* CONFIG_RISCV_XPAC_RET */
 #if defined(CONFIG_RISCV_SOC_CONTEXT_SAVE)
 GEN_OFFSET_STRUCT(arch_esf, soc_context);
 #endif
 #if defined(CONFIG_RISCV_SOC_OFFSETS)
 GEN_SOC_OFFSET_SYMS();
 #endif
+
 
 GEN_ABSOLUTE_SYM(__struct_arch_esf_SIZEOF, sizeof(struct arch_esf));
 

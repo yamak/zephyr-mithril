@@ -51,6 +51,13 @@
 #define _thread_offset_to_s11 \
 	(___thread_t_callee_saved_OFFSET + ___callee_saved_t_s11_OFFSET)
 
+#ifdef CONFIG_RISCV_XPAC_RET
+#define _thread_offset_to_pr0 \
+	(___thread_t_callee_saved_OFFSET + ___callee_saved_t_pr0_OFFSET)
+#define _thread_offset_to_xpacctx \
+	(___thread_t_callee_saved_OFFSET + ___callee_saved_t_xpacctx_OFFSET)
+#endif
+
 #define _thread_offset_to_swap_return_value \
 	(___thread_t_arch_OFFSET + ___thread_arch_t_swap_return_value_OFFSET)
 

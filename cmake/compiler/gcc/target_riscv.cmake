@@ -60,6 +60,10 @@ if(CONFIG_RISCV_ISA_EXT_ZICSR)
   string(CONCAT riscv_march ${riscv_march} "_zicsr")
 endif()
 
+if(CONFIG_RISCV_ISA_EXT_XPAC)
+  string(CONCAT riscv_march ${riscv_march} "_xpac")
+endif()
+
 if(CONFIG_RISCV_ISA_EXT_ZIFENCEI)
   string(CONCAT riscv_march ${riscv_march} "_zifencei")
 endif()

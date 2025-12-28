@@ -44,6 +44,10 @@ struct _callee_saved {
 	unsigned long s10;	/* saved register */
 	unsigned long s11;	/* saved register */
 #endif
+#ifdef CONFIG_RISCV_XPAC_RET
+	unsigned long long pr0;	/* Mithril PAC register */
+	unsigned long xpacctx;	/* Mithril PAC context */
+#endif
 };
 typedef struct _callee_saved _callee_saved_t;
 
