@@ -121,28 +121,9 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	thread->callee_saved.ra = (unsigned long)z_riscv_thread_start;
 
 #ifdef CONFIG_RISCV_XPAC_RET
-	/*
-	 * Assign unique xpacctx value for each thread.
-	 *
-	 * XPACCTX TRICK:
-	 * The PAC hardware computes the 64-bit tweak as:
-	 *   tweak = {s1 ^ pac_ctx, s0 ^ pac_ctx}
-	 *
-	 * For new threads, callee_saved.s0 and s1 are set to 0.
-	 * At verify time: s0=0, s1=0, ctx=N (thread's unique counter value)
-	 *   tweak = {0 ^ N, 0 ^ N} = {N, N}
-	 *
-	 * During pac.sign we set s0=N, s1=N to match this tweak value.
-	 *
-	 * Same tweak result, but now with per-thread PAC isolation because:
-	 *   1. Each thread has a unique xpacctx value (1, 2, 3, ...)
-	 *   2. During context switch, the correct xpacctx is loaded to CSR 0xBC5
-	 *   3. If wrong thread's xpacctx is in CSR, the XOR won't cancel out
-	 *      and PAC verification will fail
-	 *
-	 */
+
 	static unsigned long xpacctx_counter = 1;
-	thread->callee_saved.xpacctx = xpacctx_counter++;
+	thread->callee_saved.xpacctx = xpacctx_counter++; //Assign unique xpacctx value for each thread.
 
 	/*
 	 * Compute valid PAC for new thread's entry point.
@@ -181,16 +162,19 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 
 		/* Save current function's pr0, compute new thread's pr0 & pr1, restore */
 		__asm__ volatile(
-			/* Save s0/s1 to temp regs t3/t4 (caller saved) to preserve them manually */
+			/* Save s0/s1 to t3/t4 */
 			"mv t3, s0\n\t"
 			"mv t4, s1\n\t"
 			
 			/* Save this function's pr0 */
 			"pac.store pr0, 0(%5)\n\t"
-			
-			/* Set s0/s1 to xpacctx for new thread's tweak */
-			"mv s0, %7\n\t"
-			"mv s1, %7\n\t"
+
+			/* Swap mpacctx: a0 = old mpacctx, mpacctx = xpacctx_new */
+			"csrrw a0, 0xBC5, %7\n\t"
+
+			/* Set s0/s1 to 0 to match verify-time values */
+			"mv s0, zero\n\t"
+			"mv s1, zero\n\t"
 			
 			/* Compute pr0 for z_riscv_switch ret: Message = {ra, sp}
 			 * Command: pac.sign pr0, rs1(low), rs2(high) -> {rs2, rs1}
@@ -209,10 +193,13 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 			 */
 			"mv s0, t3\n\t"
 			"mv s1, t4\n\t"
-			
+
+			/* Restore mpacctx CSR to original value (saved in a0) */
+			"csrw 0xBC5, a0\n\t"
+
 			/* Store pr0 to thread->callee_saved.pr0 */
 			"pac.store pr0, 0(%2)\n\t"
-			/* Store pr1 to stack_init->soc_context.pr1 */
+			/* Store pr1 to stack_init->pr1 */
 			"pac.store pr1, 0(%6)\n\t"
 			
 			/* Restore this function's pr0 */
@@ -224,7 +211,7 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 			  "r"(&saved_pr0),
 			  "r"(&stack_init->pr1),
 			  "r"(xpacctx_val)
-			: "t3", "t4", "memory"
+			: "t3", "t4", "a0", "memory"
 		);
 	}
 #endif
