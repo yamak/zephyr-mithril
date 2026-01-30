@@ -13,6 +13,9 @@ GTEXT(_isr_wrapper)
 GTEXT(_irq_vector_table)
 
 SECTION_FUNC(reset_handler, _reset_handler)
+#ifdef CONFIG_RISCV_LPAD
+	auipc x0, 0
+#endif
 jal x1, _boot_args_get
 j __start
 
@@ -21,5 +24,3 @@ SECTION_FUNC(vector_table, _irq_vector_table)
   .rept 32
   j _isr_wrapper
   .endr
-  // reset vector
-  j _reset_handler

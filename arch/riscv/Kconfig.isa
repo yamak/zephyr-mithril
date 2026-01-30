@@ -252,3 +252,12 @@ config RISCV_ISA_EXT_XPAC
 
 	  The Xpac extension provides hardware-based pointer authentication
 	  for enhanced security against ROP attacks.
+
+config RISCV_ISA_EXT_ZICFILP
+	bool
+	help
+	  (Zicfilp) - Standard Extension for Landing Pad (CFI Forward-Edge)
+
+	  The Zicfilp extension provides landing pad instructions for
+	  control-flow integrity, protecting against forward-edge attacks
+	  such as JOP (Jump-Oriented Programming).

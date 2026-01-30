@@ -12,6 +12,14 @@ config RISCV_XPAC_RET
 	  address protection. This adds automatic PAC store and load to
 	  function prologues and epilogues.
 
+config RISCV_LPAD
+	bool "Enable Landing Pad (LPAD) for forward-edge CFI"
+	default y
+	depends on SOC_MITHRIL && RISCV_ISA_EXT_ZICFILP
+	help
+	  Enables -mlpad-func compiler flag for Mithril's Zicfilp-based
+	  landing pad protection. This adds lpad instructions at function
+	  entries to protect against forward-edge control-flow attacks (JOP).
 
 config INSTR_MEM_SIZE
 	int "Mithril Instruction Memory Size in kB"

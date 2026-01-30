@@ -23,6 +23,7 @@ char boot_args[CONFIG_BOOT_ARGS_SIZE] __attribute__((aligned(4))) = {0xFF};
 void _boot_args_get(char* boot_args_addr, uint32_t boot_args_size)
 {
     uint32_t size = boot_args_size > CONFIG_BOOT_ARGS_SIZE ? CONFIG_BOOT_ARGS_SIZE : boot_args_size;
+
     for (int i = 0; i < size; i++)
     {
         boot_args[i] = boot_args_addr[i];
