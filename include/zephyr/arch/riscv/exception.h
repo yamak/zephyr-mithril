@@ -91,6 +91,11 @@ struct arch_esf {
 	unsigned long sp;		/* preserved (user or kernel) stack pointer */
 #endif
 
+#ifdef CONFIG_RISCV_XPAC_RET
+	unsigned long long pr0;	/* Mithril PAC register */
+	unsigned long long pr1;	/* Mithril PAC register */
+#endif
+
 #ifdef CONFIG_EXCEPTION_DEBUG
 	_callee_saved_t *csf;		/* pointer to callee-saved-registers */
 #endif /* CONFIG_EXCEPTION_DEBUG */

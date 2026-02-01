@@ -51,7 +51,7 @@ void z_riscv_irq_vector_set(unsigned int irq)
 void arch_irq_enable(unsigned int irq)
 {
 	uint32_t mie;
-
+	
 #if defined(CONFIG_RISCV_HAS_PLIC)
 	unsigned int level = irq_get_level(irq);
 

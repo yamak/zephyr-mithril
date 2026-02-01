@@ -120,6 +120,102 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	/* where to go when returning from z_riscv_switch() */
 	thread->callee_saved.ra = (unsigned long)z_riscv_thread_start;
 
+#ifdef CONFIG_RISCV_XPAC_RET
+
+	static unsigned long xpacctx_counter = 1;
+	thread->callee_saved.xpacctx = xpacctx_counter++; //Assign unique xpacctx value for each thread.
+
+	/*
+	 * Compute valid PAC for new thread's entry point.
+	 *
+	 * Two PACs are needed:
+	 * 1. pr0: for z_riscv_switch's ret to z_riscv_thread_start
+	 *    - Message = {RA, SP} = {z_riscv_thread_start, stack_init}
+	 *
+	 * 2. pr1: for mret from ISR epilogue to z_thread_entry
+	 *    - Message = {MEPC, SP} = {z_thread_entry, stack_init + sizeof(arch_esf)}
+	 *
+	 * IMPORTANT: We must save/restore this function's own pr0 because
+	 * pac.sign will overwrite it. Without this, arch_new_thread's ret
+	 * would fail PAC verification.
+	 *
+	 * Hardware message format: pac.sign produces {rs2, rs1}
+	 * So pac.sign pr, sp_val, ra_val produces {ra_val, sp_val}
+	 */
+	stack_init->s0 = 0;
+	thread->callee_saved.s0 = 0;
+	thread->callee_saved.s1 = 0;
+	{
+		/* Values for pr0 (z_riscv_switch ret) */
+		/* Bind to temp registers to avoid using s0/s1 which we clobber manually */
+		register unsigned long ra_val __asm__("t0") = thread->callee_saved.ra;
+		register unsigned long sp_val __asm__("t1") = thread->callee_saved.sp;
+
+		/* Values for pr1 (mret) */
+		register unsigned long mepc_val __asm__("t2") = stack_init->mepc;
+		register unsigned long sp_mret __asm__("t5") = (unsigned long)stack_init + sizeof(struct arch_esf);
+
+		/* xpacctx value for tweak - CPU XORs s0/s1 with this CSR value */
+		register unsigned long xpacctx_val __asm__("t6") = thread->callee_saved.xpacctx;
+
+		unsigned long long saved_pr0;
+
+		/* Save current function's pr0, compute new thread's pr0 & pr1, restore */
+		__asm__ volatile(
+			/* Save s0/s1 to t3/t4 */
+			"mv t3, s0\n\t"
+			"mv t4, s1\n\t"
+			
+			/* Save this function's pr0 */
+			"pac.store pr0, 0(%5)\n\t"
+
+			/* Swap mpacctx: a0 = old mpacctx, mpacctx = xpacctx_new */
+			"csrrw a0, 0xBC5, %7\n\t"
+
+			/* Set s0/s1 to 0 to match verify-time values */
+			"mv s0, zero\n\t"
+			"mv s1, zero\n\t"
+			
+			/* Compute pr0 for z_riscv_switch ret: Message = {ra, sp}
+			 * Command: pac.sign pr0, rs1(low), rs2(high) -> {rs2, rs1}
+			 * We want {ra, sp} -> rs2=ra, rs1=sp
+			 * So: pac.sign pr0, sp, ra
+			 */
+			"pac.sign pr0, %1, %0\n\t"
+			/* Compute pr1 for mret: Message = {mepc, sp_mret} */
+			"pac.sign pr1, %3, %4\n\t"
+
+			/*
+			 * PIPELINE OPTIMIZATION: Restore s0/s1 between pac.sign and pac.store.
+			 * pac.store immediately after pac.sign causes a 1-cycle pipeline stall
+			 * due to data hazard (pac.sign result not yet available).
+			 * Inserting these mv instructions hides the latency.
+			 */
+			"mv s0, t3\n\t"
+			"mv s1, t4\n\t"
+
+			/* Restore mpacctx CSR to original value (saved in a0) */
+			"csrw 0xBC5, a0\n\t"
+
+			/* Store pr0 to thread->callee_saved.pr0 */
+			"pac.store pr0, 0(%2)\n\t"
+			/* Store pr1 to stack_init->pr1 */
+			"pac.store pr1, 0(%6)\n\t"
+			
+			/* Restore this function's pr0 */
+			"pac.load pr0, 0(%5)\n\t"
+			:
+			: "r"(ra_val), "r"(sp_val),
+			  "r"(&thread->callee_saved.pr0),
+			  "r"(sp_mret), "r"(mepc_val),
+			  "r"(&saved_pr0),
+			  "r"(&stack_init->pr1),
+			  "r"(xpacctx_val)
+			: "t3", "t4", "a0", "memory"
+		);
+	}
+#endif
+
 	/* our switch handle is the thread pointer itself */
 	thread->switch_handle = thread;
 }
