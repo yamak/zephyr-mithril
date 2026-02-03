@@ -15,7 +15,8 @@ config RISCV_XPAC_RET
 config RISCV_LPAD
 	bool "Enable Landing Pad (LPAD) for forward-edge CFI"
 	default y
-	depends on SOC_MITHRIL && RISCV_ISA_EXT_ZICFILP
+	depends on SOC_MITHRIL
+	select RISCV_ISA_EXT_ZICFILP
 	help
 	  Enables -mlpad-func compiler flag for Mithril's Zicfilp-based
 	  landing pad protection. This adds lpad instructions at function
