@@ -147,16 +147,15 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 	thread->callee_saved.s1 = 0;
 	{
 		/* Values for pr0 (z_riscv_switch ret) */
-		/* Bind to temp registers to avoid using s0/s1 which we clobber manually */
-		register unsigned long ra_val __asm__("t0") = thread->callee_saved.ra;
-		register unsigned long sp_val __asm__("t1") = thread->callee_saved.sp;
+		const unsigned long ra_val = thread->callee_saved.ra;
+		const unsigned long sp_val = thread->callee_saved.sp;
 
 		/* Values for pr1 (mret) */
-		register unsigned long mepc_val __asm__("t2") = stack_init->mepc;
-		register unsigned long sp_mret __asm__("t5") = (unsigned long)stack_init + sizeof(struct arch_esf);
+		const unsigned long mepc_val = stack_init->mepc;
+		const unsigned long sp_mret = (unsigned long)stack_init + sizeof(struct arch_esf);
 
 		/* xpacctx value for tweak - CPU XORs s0/s1 with this CSR value */
-		register unsigned long xpacctx_val __asm__("t6") = thread->callee_saved.xpacctx;
+		const unsigned long xpacctx_val = thread->callee_saved.xpacctx;
 
 		unsigned long long saved_pr0;
 
@@ -167,10 +166,10 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 			"mv t4, s1\n\t"
 			
 			/* Save this function's pr0 */
-			"pac.store pr0, 0(%5)\n\t"
+			"pac.store pr0, 0(%[saved])\n\t"
 
-			/* Swap mpacctx: a0 = old mpacctx, mpacctx = xpacctx_new */
-			"csrrw a0, 0xBC5, %7\n\t"
+			/* Swap mpacctx: t5 = old mpacctx, mpacctx = xpacctx_new */
+			"csrrw t5, 0xBC5, %[xpacctx]\n\t"
 
 			/* Set s0/s1 to 0 to match verify-time values */
 			"mv s0, zero\n\t"
@@ -181,9 +180,9 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 			 * We want {ra, sp} -> rs2=ra, rs1=sp
 			 * So: pac.sign pr0, sp, ra
 			 */
-			"pac.sign pr0, %1, %0\n\t"
+			"pac.sign pr0, %[sp], %[ra]\n\t"
 			/* Compute pr1 for mret: Message = {mepc, sp_mret} */
-			"pac.sign pr1, %3, %4\n\t"
+			"pac.sign pr1, %[sp_m], %[mepc]\n\t"
 
 			/*
 			 * PIPELINE OPTIMIZATION: Restore s0/s1 between pac.sign and pac.store.
@@ -194,24 +193,26 @@ void arch_new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 			"mv s0, t3\n\t"
 			"mv s1, t4\n\t"
 
-			/* Restore mpacctx CSR to original value (saved in a0) */
-			"csrw 0xBC5, a0\n\t"
+			/* Restore mpacctx CSR to original value (saved in t5) */
+			"csrw 0xBC5, t5\n\t"
 
 			/* Store pr0 to thread->callee_saved.pr0 */
-			"pac.store pr0, 0(%2)\n\t"
+			"pac.store pr0, 0(%[pr0])\n\t"
 			/* Store pr1 to stack_init->pr1 */
-			"pac.store pr1, 0(%6)\n\t"
+			"pac.store pr1, 0(%[pr1])\n\t"
 			
 			/* Restore this function's pr0 */
-			"pac.load pr0, 0(%5)\n\t"
+			"pac.load pr0, 0(%[saved])\n\t"
 			:
-			: "r"(ra_val), "r"(sp_val),
-			  "r"(&thread->callee_saved.pr0),
-			  "r"(sp_mret), "r"(mepc_val),
-			  "r"(&saved_pr0),
-			  "r"(&stack_init->pr1),
-			  "r"(xpacctx_val)
-			: "t3", "t4", "a0", "memory"
+			: [ra] "r"(ra_val),
+			  [sp] "r"(sp_val),
+			  [pr0] "r"(&thread->callee_saved.pr0),
+			  [sp_m] "r"(sp_mret),
+			  [mepc] "r"(mepc_val),
+			  [saved] "r"(&saved_pr0),
+			  [pr1] "r"(&stack_init->pr1),
+			  [xpacctx] "r"(xpacctx_val)
+			: "t3", "t4", "t5", "memory"
 		);
 	}
 #endif
